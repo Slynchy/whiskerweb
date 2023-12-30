@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    "outDir": "./dist/",
+    "baseUrl": "./src",
+    "noImplicitAny": true,
+    "moduleResolution": "node",
+    "target": "es6",
+    "esModuleInterop": true,
+    "jsx": "react-native",
+    "allowJs": true,
+    "sourceMap": false,
+    "paths": {},
+    "typeRoots": [
+      "./types",
+      "./node_modules/@types",
+      "./lib/types"
+    ]
+  },
+  "include": [
+    "src/**/*" // Include all files in the src folder
+  ],
+  "exclude": [
+    "dist/**/*",
+    "node_modules/**/*"
+  ]
+}

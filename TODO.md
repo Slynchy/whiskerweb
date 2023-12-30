@@ -1,0 +1,5 @@
+- Make `PlayerDataSingleton` data-driven so it doesn't require actual code changes to use
+  - This will make it less type-safe but eh fuck it
+  - Also gotta do with `Localizations.ts` but less prio
+- rest of resize logic
+- Evaluate the necessity of tsconfig.json

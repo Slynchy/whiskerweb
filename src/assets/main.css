@@ -1,0 +1,86 @@
+@charset "UTF-8";
+
+html { pointer-events: none; }
+
+body {
+    pointer-events: auto;
+    margin: 0 0 0 0;
+    background-color: #000000;
+    overflow: hidden;
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    /*cursor:url("sprites/cursor.png"), auto;*/
+}
+
+#Bluescreen, .Bluescreen {
+    font-smooth: never;
+    left: 50%;
+    top: 50%;
+    transform: translateX(-50%) translateY(-50%);
+    -webkit-font-smoothing: none;
+    -moz-osx-font-smoothing: unset;
+}
+
+.BluescreenTextContainer {
+    position: absolute;
+    transform: translateX(-50%) translateY(-50%);
+    width: 50%;
+    top: 50%;
+    left: 50%;
+}
+
+/*@font-face {*/
+/*    font-family: 'MS Sans Serif 95';*/
+/*    src:  url('fonts/ms_sans_serif_8pt-webfont.woff2') format('woff2'),*/
+/*          url('fonts/ms_sans_serif_8pt-webfont.woff') format('woff');*/
+/*}*/
+
+/*@font-face {*/
+/*    font-family: 'MS Sans Serif 95 Bold';*/
+/*    src: url('fonts/ms_sans_serif_8pt_bold-webfont.woff') format('woff');*/
+/*}*/
+
+/*canvas, img { !* makes a change, noticeable [28/05/16] *!*/
+/*    image-rendering: optimizeSpeed;*/
+/*    image-rendering: -moz-crisp-edges;*/
+/*    image-rendering: -webkit-optimize-contrast;*/
+/*    image-rendering: optimize-contrast;*/
+/*    image-rendering: pixelated;*/
+/*    -ms-interpolation-mode: nearest-neighbor;*/
+/*}*/
+
+#moveGUI {
+    z-index: 999;
+}
+
+#main-canvas {
+    position: absolute;
+    transform: translateX(-50%) translateY(-50%);
+    left: 50%;
+    top: 50%;
+    /*width: 1280px;*/
+    /*height: 720px;*/
+    z-index: 0;
+}
+
+#ui-canvas {
+    position: absolute;
+    transform: translateX(-50%) translateY(-50%);
+    left: 50%;
+    top: 50%;
+    /*width: 1280px;*/
+    /*height: 720px;*/
+    z-index: 1;
+    /*touch-action: manipulation;*/
+}
+
+#click-handler {
+    position: absolute;
+    transform: translateX(-50%) translateY(-50%);
+    left: 50%;
+    top: 50%;
+    /*width: 1280px;*/
+    /*height: 720px;*/
+    z-index: 2;
+    /*touch-action: manipulation;*/
+}
