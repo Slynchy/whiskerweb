@@ -1,4 +1,4 @@
-![WhiskerWeb Logo](https://raw.githubusercontent.com/Slynchy/whiskerweb/main/src/assets/sprites/whiskerweb_256.png)
+![WhiskerWeb Logo](http://slynch.xyz/images/whiskerweb_256.png)
 
 # WhiskerWeb
 A TypeScript ECS framework built on-top of PixiJS v8. Long live catto.
