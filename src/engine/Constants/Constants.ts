@@ -1,5 +1,5 @@
 export const __WWPRODUCTION: boolean = false;
-export const __WWVERSION: string = "FIXME";
+export const __WWVERSION: string = "0.4.1";
 
 export const ENGINE_DEBUG_MODE: boolean = !__WWPRODUCTION;
 export const SCENE_DEBUG_MODE: boolean = false;

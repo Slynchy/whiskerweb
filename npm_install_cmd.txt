@@ -1,1 +1,0 @@
-pixi.js@8.0.0-rc @capacitor-community/admob @capacitor/app @capacitor/screen-orientation @pixi/sound @tweenjs/tween.js curve-interpolator firebase gameanalytics is-mobile stats.js

@@ -1,4 +1,4 @@
-import { IVector2 } from "../../../index";
+import { IVector2 } from "../../index";
 
 const DEFAULT_MOVE_COST: number = 1.0;
 

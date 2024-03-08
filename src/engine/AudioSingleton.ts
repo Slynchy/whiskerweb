@@ -1,6 +1,6 @@
 import { IMediaInstance, sound } from "@pixi/sound";
 import { ENGINE_DEBUG_MODE } from "./Constants/Constants";
-import { HelperFunctions } from "../../index";
+import { HelperFunctions } from "./HelperFunctions";
 import { getSupportedAudioFormat } from "./HelperFunctions/getSupportedAudioExtension";
 import { PlayerDataSingleton } from "./PlayerDataSingleton";
 

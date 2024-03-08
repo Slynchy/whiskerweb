@@ -1,27 +1,27 @@
 {
   "compilerOptions": {
+    "skipLibCheck": true,
     "declaration": true,
-    "outDir": "./dist/",
+    "outDir": "dist",
     "baseUrl": "./src",
     "noImplicitAny": true,
     "moduleResolution": "node",
     "target": "es6",
     "esModuleInterop": true,
-    "jsx": "react-native",
     "allowJs": true,
-    "sourceMap": false,
+    "sourceMap": true,
     "paths": {},
     "typeRoots": [
       "./types",
-      "./node_modules/@types",
-      "./lib/types"
+      "./node_modules/@types"
     ]
   },
   "include": [
-    "src/**/*" // Include all files in the src folder
+    "src", // Include all files in the src folder
+    "index.ts", // Include the index.ts file
   ],
   "exclude": [
-    "dist/**/*",
-    "node_modules/**/*"
+    "dist",
+    "node_modules"
   ]
 }

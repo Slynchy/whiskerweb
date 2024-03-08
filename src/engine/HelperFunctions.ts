@@ -12,11 +12,12 @@ import { InteractionEvent } from "./Types/InteractionEvent";
 import { SpriteComponent } from "./Components/SpriteComponent";
 import { Engine } from "./Engine";
 import { DIRECTION } from "./Types/Direction";
-import { IVector2, IVector3 } from "../../index";
+import { IVector2 } from "./Types/IVector2";
 import * as TWEEN from '@tweenjs/tween.js';
 import { AudioSingleton } from "./AudioSingleton";
 import { Vector2 } from "../lib/Vector2";
 import { ENGINE_DEBUG_MODE } from "./Constants/Constants";
+import { TWEENDirection, TWEENFunctions } from "./HelperFunctions/TWEENFunctions";
 
 export interface TooltipProperties {
     x: number;
@@ -34,9 +35,9 @@ export interface ITweenAnimationReturnValue {
     promise: Promise<void>;
 }
 
-declare const window: Window & {
-    ENGINE: Engine;
-};
+// declare const window: Window & {
+//     ENGINE: Engine;
+// };
 
 export class HelperFunctions {
     constructor() {
@@ -284,7 +285,7 @@ export class HelperFunctions {
         const canvas3dHeight = _screenSize ? _screenSize.y : parseInt(
             HelperFunctions.getMainCanvasElement().style.height
         );
-        switch (ENGINE["_autoResizeVal"]) {
+        switch (ENGINE["autoResize"]) {
             case "height":
                 scaleFactor = canvas3dHeight / HelperFunctions.getUICanvas().height;
                 break;
@@ -480,7 +481,10 @@ export class HelperFunctions {
     public static TWEENVec2AsPromise(
         _target: Vector2 | ObservablePoint | IVector2,
         _destVal: Vector2 | ObservablePoint | IVector2,
-        _func: typeof TWEEN.Easing.Linear.None,
+        _func: typeof TWEEN.Easing.Linear.None | {
+            function: TWEENFunctions;
+            direction: TWEENDirection;
+        },
         _duration: number = 1000,
         _onTick?: (obj?: any, elapsed?: number) => boolean
     ): ITweenAnimationReturnValue {
@@ -589,7 +593,10 @@ export class HelperFunctions {
         _target: any,
         _key: string,
         _destVal: number,
-        _func: typeof TWEEN.Easing.Linear.None,
+        _func: typeof TWEEN.Easing.Linear.None | {
+            function: TWEENFunctions;
+            direction: TWEENDirection;
+        },
         _duration: number = 1000,
         _onTick?: (obj?: any, elapsed?: number) => boolean,
         _postTick?: (obj?: any, elapsed?: number) => void,
@@ -622,7 +629,11 @@ export class HelperFunctions {
                     tween.stop();
                 }
             })
-            .easing(_func);
+            .easing(
+                typeof _func == "function" ?
+                    // @ts-ignore
+                    _func : TWEEN.Easing[_func.function][_func.direction]
+            );
 
         let resolveEscape: Function;
         const promise = new Promise<void>((resolve) => {
@@ -635,6 +646,7 @@ export class HelperFunctions {
 
         retVal.cancel = () => {
             tween.stop();
+            tween.end();
             resolveEscape();
         };
         retVal.promise = promise;
@@ -650,7 +662,7 @@ export class HelperFunctions {
         let resource: T | undefined;
         try {
             await HelperFunctions.waitForTruth(() => {
-                return Boolean(resource = window.ENGINE.getPIXIResource("gameLogo") as unknown as T);
+                return Boolean(resource = ENGINE.getPIXIResource("gameLogo") as unknown as T);
             }, _refreshRate);
         } catch (err) {
             console.error(err);

@@ -1,4 +1,4 @@
-import { Component } from "../../../index";
+import { Component } from "../Component";
 import { RandomRotationSystem } from "../Systems/RandomRotationSystem";
 
 export interface IRandomRotationConfig {

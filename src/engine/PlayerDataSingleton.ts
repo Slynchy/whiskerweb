@@ -30,12 +30,31 @@ class PlayerDataSingletonClass {
         return this._dirty.length > 0;
     }
 
-    initialize(_keys: string[], _data: IData): void {
+    public setData<T>(_key: TSaveKey, _value: T): void {
+        if (this._keys.indexOf(_key) === -1) {
+            console.error(`Key ${_key} not found in PlayerDataSingleton`);
+            return;
+        }
+        if(this._data[_key] !== _value) {
+            this.dirtify(_key);
+        }
+        this._data[_key] = _value;
+    }
+
+    public getData<T>(_key: TSaveKey): T {
+        if (this._keys.indexOf(_key) === -1) {
+            console.error(`Key ${_key} not found in PlayerDataSingleton`);
+            return undefined as unknown as T;
+        }
+        return this._data[_key] as T;
+    }
+
+    initialize(_keys: string[], _data?: IData): void {
         const data = _data || {} as Record<string, unknown>;
         if (this.isInitialized()) {
             console.warn("PlayerDataSingleton being initialized multiple times");
         }
-        this._data = data;
+        this._data = data || {};
         this._keys = _keys;
 
         this._initialized = true;
@@ -44,6 +63,11 @@ class PlayerDataSingletonClass {
     public export(_exportAll: boolean = false): { [key: string]: unknown } {
         const retVal: { [key: string]: unknown } = {};
 
+        Object.keys(this._data).forEach((_key) => {
+            if(this._dirty.indexOf(_key) !== -1 || _exportAll) {
+                retVal[_key] = this._data[_key];
+            }
+        });
         this._dirty = [];
 
         return retVal;

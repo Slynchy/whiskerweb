@@ -50,7 +50,7 @@ export class LocalStorageSaver extends Saver {
                         window.localStorage.setItem(curr, data[curr] as string);
                     }
                     if (ENGINE_DEBUG_MODE) {
-                        console.log(`[LocalStorageSaver] Saved key "%s" with data %o`, curr, data[curr]);
+                        console.log(`[LocalStorageSaver] Saved key %o with data %o`, curr, data[curr]);
                     }
                 } catch (err) {
                     console.error(err);

@@ -2,9 +2,9 @@ import { Engine } from "./Engine";
 import { Scene } from "./Scene";
 import { GameObject } from "./GameObject";
 
-declare const window: Window & {
-    ENGINE: Engine
-};
+// declare const window: Window & {
+//     ENGINE: Engine
+// };
 
 interface StateConfig {
     scene?: Scene;

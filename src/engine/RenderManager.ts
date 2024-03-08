@@ -15,15 +15,65 @@ import {TWhiskerConfig} from "../config/whiskerConfig";
 import { ENGINE_DEBUG_MODE } from "./Constants/Constants";
 import { Easing } from "@tweenjs/tween.js";
 import isMobile from "is-mobile";
-import {ENGINE_ERROR} from "../../index";
+import { ENGINE_ERROR } from "./ErrorCodes/EngineErrorCodes";
 
 export class RenderManager {
 
     private canvasElement: HTMLCanvasElement;
     private renderer2d: Renderer;
+    private debugGrid: Graphics;
 
     constructor(_engine: Engine) {
         // this.canvasElement = document.createElement("canvas") as HTMLCanvasElement;
+    }
+
+    public createDebugGrid(): void {
+        if(this.debugGrid) {
+            this.debugGrid.removeFromParent();
+            this.debugGrid.destroy();
+            this.debugGrid = null;
+        }
+
+        const debugGrid = this.debugGrid = new Graphics();
+        // debugGrid.strokeStyle.width = 5;
+        // debugGrid.strokeStyle.color = 0x00ff00;
+        // debugGrid.strokeStyle.alpha = 0.3;
+        // debugGrid.strokeStyle = (5, 0x00FF00, 0.3, 0.5);
+        debugGrid.lineTo(
+            this.renderer2d.width,
+            0
+        )
+            .lineTo(
+                this.renderer2d.width,
+                this.renderer2d.height
+            )
+            .lineTo(
+                0,
+                this.renderer2d.height
+            )
+            .lineTo(
+                0,
+                0
+            )
+            .lineTo(
+                this.renderer2d.width,
+                this.renderer2d.height
+            )
+            .moveTo(
+                0,
+                this.renderer2d.height
+            )
+            .lineTo(
+                this.renderer2d.width,
+                0
+            )
+            .stroke({
+                color: 0x00ff00,
+                width: 4,
+                alpha: 0.3
+            });
+        ENGINE["getStage"]().addChild(debugGrid);
+        ENGINE["getStage"]().setChildIndex(debugGrid, 0);
     }
 
     public async initializeRenderer(_config: TWhiskerConfig): Promise<void> {
@@ -67,44 +117,7 @@ export class RenderManager {
         document.body.appendChild(this.canvasElement);
 
         if (ENGINE_DEBUG_MODE) {
-            const debugGrid = new Graphics();
-            // debugGrid.strokeStyle.width = 5;
-            // debugGrid.strokeStyle.color = 0x00ff00;
-            // debugGrid.strokeStyle.alpha = 0.3;
-            // debugGrid.strokeStyle = (5, 0x00FF00, 0.3, 0.5);
-            debugGrid.lineTo(
-                this.renderer2d.width,
-                0
-            )
-                .lineTo(
-                    this.renderer2d.width,
-                    this.renderer2d.height
-                )
-                .lineTo(
-                    0,
-                    this.renderer2d.height
-                )
-                .lineTo(
-                    0,
-                    0
-                )
-                .lineTo(
-                    this.renderer2d.width,
-                    this.renderer2d.height
-                )
-                .moveTo(
-                    0,
-                    this.renderer2d.height
-                )
-                .lineTo(
-                    this.renderer2d.width,
-                    0
-                )
-                .stroke({
-                    color: 0x00ff00,
-                    alpha: 0.3
-                });
-            ENGINE["getStage"]().addChild(debugGrid);
+            this.createDebugGrid();
         }
     }
 
@@ -123,7 +136,7 @@ export class RenderManager {
         const height = _h - (_engine["_adjustHeightForBannerAd"] ? 60 : 0);
         const windowHeight = window.innerHeight - (_engine["_adjustHeightForBannerAd"] ? 60 : 0);
 
-        if (_engine["_autoResizeVal"] === "width") {
+        if (_engine["autoResize"] === "width") {
             const val = !isMobile() ?
                 Math.ceil(Math.min(windowHeight, height * (window.innerWidth / _w)))
                 :
@@ -136,7 +149,7 @@ export class RenderManager {
             _renderer.canvas.style.transform = `translateX(0%) translateY(-50%)`;
             _renderer.canvas.style.top = `50%`;
             _renderer.canvas.style.left = `0%`;
-        } else if (_engine["_autoResizeVal"] === "height") {
+        } else if (_engine["autoResize"] === "height") {
             const val = !isMobile() ?
                 Math.ceil(Math.min(window.innerWidth, _w * (windowHeight / height)))
                 :

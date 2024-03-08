@@ -1,7 +1,8 @@
 import { Component } from "../Component";
-import {Sprite as PIXISprite, Texture as PIXITexture, Filter as PIXIFilter, Filter} from "pixi.js";
+import { Sprite as PIXISprite, Texture as PIXITexture, Filter as PIXIFilter, Filter } from "pixi.js";
 import { System } from "../Systems/System";
 import { SpriteSystem } from "../Systems/SpriteSystem";
+import { IVector2 } from "../Types/IVector2";
 
 export class SpriteComponent extends Component {
 
@@ -9,10 +10,12 @@ export class SpriteComponent extends Component {
     protected static readonly _system: typeof System = SpriteSystem;
     private _sprite: PIXISprite;
 
-    constructor(_texture?: PIXITexture) {
+    constructor(_textureKey?: string) {
         super();
 
-        if (_texture) this.setTexture(_texture);
+        if (_textureKey) this.setTexture(
+            _textureKey
+        );
     }
 
     public onAttach(): void {
@@ -27,6 +30,14 @@ export class SpriteComponent extends Component {
     }
 
     public onComponentAttached(_componentId: string, _component: Component): void {
+    }
+
+    public get pivot(): IVector2 {
+        return this._sprite.pivot;
+    }
+
+    public get anchor(): IVector2 {
+        return this._sprite.anchor;
     }
 
     public get width(): number {
@@ -56,11 +67,11 @@ export class SpriteComponent extends Component {
         return this._sprite || null;
     }
 
-    public setTexture(_texture: PIXITexture): void {
+    public setTexture(_textureKey: string): void {
         if (this._sprite) {
-            this._sprite.texture = _texture;
+            this._sprite.texture = ENGINE.getPIXIResource(_textureKey) as PIXITexture;
         } else {
-            this.init(_texture);
+            this.init(ENGINE.getPIXIResource(_textureKey) as PIXITexture);
         }
     }
 

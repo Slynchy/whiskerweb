@@ -28,7 +28,8 @@ import { AnalyticsHandler } from "./Analytics/AnalyticsHandler";
 import { BaseAnalytics } from "./Analytics/BaseAnalytics";
 import { FirebaseAnalytics } from "./Analytics/FirebaseAnalytics";
 import { LoadtimeMeasurer } from "./Debug/LoadtimeMeasurer";
-import { GameObject, HelperFunctions } from "../../index";
+import { GameObject } from "./GameObject";
+import { HelperFunctions } from "./HelperFunctions";
 import { FirebaseSingleton } from "./FirebaseSingleton";
 import { FirebaseFeatures } from "./Types/FirebaseFeatures";
 import { isWebPSupported } from "./HelperFunctions/isWebPSupported";
@@ -45,6 +46,7 @@ import { WASMLoader } from "./Loaders/WASMLoader";
 import { GameAnalytics } from "./Analytics/GameAnalytics";
 import {DEPRECATED_SCALE_MODES} from "pixi.js/lib/rendering/renderers/shared/texture/const";
 import {CapacitorSDK} from "./PlatformSDKs/CapacitorSDK";
+import { LogoAscii } from "../config/ascii";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Stats = require('stats.js');
 
@@ -57,13 +59,11 @@ declare global {
 
 let _INITIAL_LOAD_TIME: number = -1;
 
+type TAutoResize = "either" | "width" | "height" | "none";
+
 export class Engine {
 
     // CONST PROPS
-    // private readonly renderer3d: WebGLRenderer;
-    // private readonly effectComposer: EffectComposer;
-    // private readonly defaultCameraType: string;
-
     private readonly ticker: PIXITicker;
     private readonly stateManager: StateManager;
     private readonly loader: PIXILoader;
@@ -71,7 +71,6 @@ export class Engine {
     private readonly wasmLoader: WASMLoader;
     private readonly renderManager: RenderManager;
     private readonly stage: Container;
-    // private readonly defaultTexture: undefined;
     private saveHandler: SaveHandler;
     private analyticsHandler: AnalyticsHandler;
     private platformSdk: PlatformSDK;
@@ -82,21 +81,26 @@ export class Engine {
     private readonly loadtimeMeasurer: LoadtimeMeasurer;
 
     // RUNTIME PROPS
-    // private renderPasses: Pass[] = [];
-    // private mainCamera: Camera;
+    /**
+     * If true, pauses tickers/rendering when window loses focus
+     */
     public pauseOnFocusLoss: boolean = false;
-    // private DEFAULT_TEXTURE: PIXITexture;
+    /**
+     * Whether to auto-resize the renderer when the window changes size, and how
+     */
+    public autoResize: TAutoResize;
+    /**
+     * The loading screen object to instantiate when loading states
+     */
+    public loadingScreenObject: GameObject | null = null;
     private dt: number = 1;
     private _scaleFactor: number = 1;
     private _pauseRendering: boolean = false;
     private _onErrorFunctions: Array<typeof window.onerror> = [];
     private _onPromiseRejectionFunctions: Array<(ev: PromiseRejectionEvent) => void> = [];
     private _loadAssetsPromise: Promise<void>;
-    private _autoResizeVal: "either" | "width" | "height" | "none";
-    private _loadingScrObject: GameObject | null = null;
     private _adjustHeightForBannerAd: boolean = false;
 
-    // todo: abstract tsthreeConfig
     constructor() {
 
         if ((window as unknown as { ENGINE: Engine }).ENGINE)
@@ -122,22 +126,58 @@ export class Engine {
         window.ENGINE = this;
     }
 
-    public initializeAnalytics(): void {
-        this.analyticsHandler.initialize();
+    public getRenderManager(): RenderManager {
+        return this.renderManager;
     }
 
-    public getWASM<T>(_key: string): T | null {
-        return this.wasmLoader.get(_key) || null;
+    public hasJSON(key: string): boolean {
+        return this.jsonLoader.isAssetLoaded(key);
     }
 
-    public getTexture(_key: string): PIXITexture {
-        return this.loader.has(_key) ? this.loader.get(_key) : null;
+    public getJSON<T extends object>(key: string): T {
+        return this.jsonLoader.get(key);
     }
 
-    public setScaleMode(scaleMode: SCALE_MODE): void {
-        console.warn("setScaleMode not working as of pixi v8 upgrade");
+    public getTicker(): PIXITicker {
+        return this.ticker;
     }
 
+    public getStage(): Container {
+        return this.stage;
+    }
+
+    public get scaleFactor(): number {
+        return this._scaleFactor;
+    }
+
+    public get platformSDK(): PlatformSDK {
+        return this.platformSdk;
+    }
+
+    public getSaveHandler(): SaveHandler {
+        return this.saveHandler;
+    }
+
+    public get renderingPaused(): boolean {
+        return this._pauseRendering;
+    }
+
+    public set renderingPaused(val: boolean) {
+        this._pauseRendering = val;
+    }
+
+    get deltaTime(): number {
+        return this.dt;
+    }
+
+    set deltaTime(dt: number) {
+        this.dt = dt;
+    }
+
+    /**
+     * @deprecated Shouldn't use
+     * @private
+     */
     private _getPlayerDataSingleton(): typeof PlayerDataSingleton {
         if(ENGINE_DEBUG_MODE) {
             return PlayerDataSingleton;
@@ -146,20 +186,72 @@ export class Engine {
         }
     }
 
-    public isLoaderLoading(): boolean {
-        return this.loader.isLoading;
+    /**
+     * @returns True if the asset is loaded, false if it's not
+     * @param _key
+     */
+    public isPIXIAssetLoaded(_key: string): boolean {
+        return this.loader.isAssetLoaded(_key) ||
+            false;
     }
 
+    /**
+     * Initializes the analytics handler
+     */
+    public initializeAnalytics(): void {
+        this.analyticsHandler.initialize();
+    }
+
+    /**
+     * Get a loaded WASM module from cache
+     */
+    public getWASM<T>(_key: string): T | null {
+        return this.wasmLoader.get(_key) || null;
+    }
+
+    /**
+     * Get a loaded PIXI texture from cache
+     * @param _key
+     */
+    public getTexture(_key: string): PIXITexture {
+        return this.loader.has(_key) ? this.loader.get(_key) : null;
+    }
+
+    /**
+     * Sets the scale mode for the renderer
+     * @deprecated Not yet implemented as of PIXI v8 upgrade
+     * @param scaleMode "nearest" or "linear"
+     */
+    public setScaleMode(scaleMode: SCALE_MODE): void {
+        console.warn("setScaleMode not working as of pixi v8 upgrade");
+    }
+
+    /**
+     * Returns true if any loaders are loading
+     */
+    public isLoaderLoading(): boolean {
+        return this.loader.isLoading || this.jsonLoader.isLoading || this.wasmLoader.isLoading;
+    }
+
+    /**
+     * Initializes the Firebase analytics module with the analytics handler
+     */
     public initializeFirebaseAnalytics(): void {
         this.analyticsHandler.addModule(
             new FirebaseAnalytics(FirebaseSingleton.getAnalytics())
         );
     }
 
+    /**
+     * Gets the currently-loaded state from StateManager
+     */
     public getActiveState(): State {
         return this.stateManager.getState();
     }
 
+    /**
+     * Requests haptic feedback from the platform SDK, returns true if successful
+     */
     public requestHapticFeedback(): Promise<boolean> {
         if(
             !isMobile()
@@ -170,6 +262,10 @@ export class Engine {
         }
     }
 
+    /**
+     * Tracks the initial load time of the game
+     * @deprecated Not currently working
+     */
     public trackInitialLoadTime(): Promise<void> {
         throw new Error("Not currently working");
 
@@ -201,60 +297,32 @@ export class Engine {
         }
     }
 
+    /**
+     * Hooks a function to be called when an unhandled error occurs
+     * @param _func
+     */
     public hookOnError(_func: typeof window.onerror): void {
         this._onErrorFunctions.push(_func);
     }
 
+    /**
+     * Hooks a function to be called when an unhandled promise rejection occurs
+     * @param _func
+     */
     public hookOnPromiseRejection(_func: (ev: PromiseRejectionEvent) => void): void {
         this._onPromiseRejectionFunctions.push(_func);
     }
 
-    public _setupHookOnError(): void {
-        window.onunhandledrejection = (
-            e: PromiseRejectionEvent
-        ) => {
-            this._onPromiseRejectionFunctions.forEach((_f) => _f(e));
-        };
-        window.onerror = (
-            _msg,
-            _url,
-            _lineNo,
-            _columnNo,
-            _error
-        ) => {
-            this._onErrorFunctions.forEach((_f) => _f(
-                _msg,
-                _url,
-                _lineNo,
-                _columnNo,
-                _error
-            ));
-        };
-    }
-
-    public get scaleFactor(): number {
-        return this._scaleFactor;
-    }
-
-    public get platformSDK(): PlatformSDK {
-        return this.platformSdk;
-    }
-
-    public getSaveHandler(): SaveHandler {
-        return this.saveHandler;
-    }
-
-    public get renderingPaused(): boolean {
-        return this._pauseRendering;
-    }
-
-    public set renderingPaused(val: boolean) {
-        this._pauseRendering = val;
-    }
-
-    public resizeRenderer(_w: number, _h: number, _autoResizeVal?: string): void {
+    /**
+     * Resizes the renderer to the specified width and height
+     * For people who know what they're doing, otherwise use `autoResize`
+     * @param _w
+     * @param _h
+     * @param _autoResizeVal
+     */
+    public resizeRenderer(_w: number, _h: number, _autoResizeVal?: TAutoResize): void {
         if(_autoResizeVal === "either") {
-            this._autoResizeVal =
+            this.autoResize =
                 this.renderManager.height > this.renderManager.width ?
                     "height" : "width";
         }
@@ -263,26 +331,16 @@ export class Engine {
             _h,
             this, this.renderManager.getRenderer()
         );
-    }
-
-    get deltaTime(): number {
-        return this.dt;
-    }
-
-    set deltaTime(dt: number) {
-        this.dt = dt;
-    }
-
-    private static hideFontPreload(): void {
-        const collection: HTMLCollection =
-            document.getElementsByClassName("fontPreload");
-
-        // tslint:disable-next-line:prefer-for-of
-        for (let i: number = collection.length - 1; i >= 0; i--) {
-            collection[i].parentNode.removeChild(collection[i]);
+        if(ENGINE_DEBUG_MODE) {
+            this.renderManager.createDebugGrid();
         }
     }
 
+    /**
+     * Unloads the current state and loads the specified state
+     * @param _newState
+     * @param _params Parameters to pass to the new state
+     */
     public changeState(_newState: State, _params?: unknown): Promise<void> {
         return this.stateManager.setState(_newState, _params);
     }
@@ -294,31 +352,24 @@ export class Engine {
         this.renderManager.getRenderer().render(this.stage);
     }
 
+    /**
+     * Sets the refresh rate of the ticker/renderer
+     * @param fps
+     */
     public setMaxFPS(fps: number): void {
         this.ticker.maxFPS = fps;
     }
 
+    /**
+     * Sets the background colour of the renderer/canvas
+     * @param _col
+     * @param _alpha (optional)
+     */
     public setBackgroundColor(_col: number, _alpha?: number): void {
         this.renderManager.getRenderer().background.color = _col;
         if (typeof _alpha !== "undefined") {
             this.renderManager.getRenderer().background.alpha = _alpha;
         }
-    }
-
-    public getTicker(): PIXITicker {
-        return this.ticker;
-    }
-
-    public getStage(): Container {
-        return this.stage;
-    }
-
-    public hasJSON(key: string): boolean {
-        return this.jsonLoader.isAssetLoaded(key);
-    }
-
-    public getJSON<T extends object>(key: string): T {
-        return this.jsonLoader.get(key);
     }
 
     /**
@@ -331,6 +382,11 @@ export class Engine {
         return exists && !(target as any)?.error;
     }
 
+    /**
+     * Gets the specified PIXI resource from the loader, if it exists
+     * @param key
+     * @returns The PIXI texure/spritesheet, or undefined if it doesn't exist
+     */
     public getPIXIResource(key: string): PIXITexture | Spritesheet {
         const tex: any = this.loader.get(key);
         if (ENGINE_DEBUG_MODE && !tex) {
@@ -346,16 +402,76 @@ export class Engine {
         return (tex && tex.texture ? tex.texture : tex);
     }
 
+    /**
+     * Manually adds the specified asset to the PIXI loader cache
+     * For people who know what they're doing.
+     * @param key
+     * @param asset
+     */
     public cachePIXIResource(key: string, asset: any): void {
         this.loader.cache(key, asset);
     }
 
+    /**
+     * Unloads the specified asset from the PIXI loader cache
+     * @param key
+     */
     public unloadPIXIResource(key: string): void {
         this.loader.unload(key);
     }
 
     /**
-     *
+     * Records a loadtime event
+     * @deprecated Not yet properly implemented
+     * @param _name
+     * @param _force
+     */
+    public recordLoadtime(_name?: string, _force?: boolean): Promise<void> {
+        // const-guarded/written this way to support tree-shaking easier
+        if (LOADTIME_DEBUG_MODE) {
+            if(!_force) {
+                return HelperFunctions.wait(1).then(() => {
+                    this.loadtimeMeasurer.recordLoadtime(_name);
+                });
+            } else {
+                this.loadtimeMeasurer.recordLoadtime(_name);
+            }
+        }
+        return Promise.resolve();
+    }
+
+    /**
+     * `window.alert`s the loadtime as a string, for debugging
+     */
+    public alertLoadtime(): void {
+        if (LOADTIME_DEBUG_MODE) {
+            alert(this.exportLoadtimeAsString());
+        }
+    }
+
+    /**
+     * Exports the loadtime as a string, for debugging
+     */
+    public exportLoadtimeAsString(): string {
+        if (LOADTIME_DEBUG_MODE) {
+            return this.loadtimeMeasurer.exportLoadtime();
+        }
+    }
+
+    /**
+     * Function that is called when a resize event is called, or to force a resize
+     */
+    public onResize(): void {
+        this.resizeRenderer(
+            window.innerWidth,
+            window.innerHeight,
+            this.autoResize
+        );
+        this.getActiveState()?.onResize?.(this);
+    }
+
+    /**
+     * Processes a spritesheet and adds its textures to the PIXI loader cache
      * @param _spritesheet
      * @returns True on success, false on failure
      */
@@ -376,10 +492,12 @@ export class Engine {
         return true;
     }
 
-    public getRenderManager(): RenderManager {
-        return this.renderManager;
-    }
-
+    /**
+     * Logs an analytics event with the analytics handler
+     * @param eventName
+     * @param valueToSum
+     * @param parameters
+     */
     public logEvent(eventName: string, valueToSum?: number, parameters?: { [key: string]: string; }): void {
         parameters = parameters || {};
         return this.analyticsHandler.logEvent(
@@ -392,11 +510,12 @@ export class Engine {
         );
     }
 
-    public isPIXIAssetLoaded(_key: string): boolean {
-        return this.loader.isAssetLoaded(_key) ||
-            false;
-    }
-
+    /**
+     * Main initialization function for the engine
+     * @param _initialState State to load into
+     * @param _config Configuration object for engine
+     * @param _onProgress (optional) Callback for loading progress
+     */
     public async init(
         _initialState: State,
         _config: TWhiskerConfig,
@@ -406,7 +525,7 @@ export class Engine {
         this.pauseOnFocusLoss = _config.pauseOnFocusLoss || false;
         this.setScaleMode(_config.scaleMode);
         if(_config.autoResize === "either") {
-            this._autoResizeVal =
+            this.autoResize =
                 _config.height > _config.width ?
                     "height" : "width";
         }
@@ -456,7 +575,7 @@ export class Engine {
             console.warn("`config.logErrors === \"sentry\"` is not yet implemented");
         }
         if(_config.loadingScreenComponent) {
-            const loadingScrObject = this._loadingScrObject = new GameObject();
+            const loadingScrObject = this.loadingScreenObject = new GameObject();
             loadingScrObject.addComponent(_config.loadingScreenComponent);
             loadingScrObject.zIndex = Number.MAX_SAFE_INTEGER;
             this.stage.addChild(loadingScrObject);
@@ -480,18 +599,24 @@ export class Engine {
 
         const analyticsModules: BaseAnalytics[] = [];
         const savers: Saver[] = [];
-        switch (_config.gamePlatform) {
-            case "capacitor":
-                savers.push(new LocalStorageSaver());
-                this.platformSdk = new CapacitorSDK();
-                analyticsModules.push(new GameAnalytics());
-                break;
-            case "offline":
-            default:
-                savers.push(new LocalStorageSaver());
-                this.platformSdk = new DummySDK();
-                analyticsModules.push(new GameAnalytics());
-                break;
+        if(typeof _config.gamePlatform === "string") {
+            switch (_config.gamePlatform) {
+                case "capacitor":
+                    savers.push(new LocalStorageSaver());
+                    this.platformSdk = new CapacitorSDK();
+                    analyticsModules.push(new GameAnalytics());
+                    break;
+                case "offline":
+                default:
+                    savers.push(new LocalStorageSaver());
+                    this.platformSdk = new DummySDK();
+                    analyticsModules.push(new GameAnalytics());
+                    break;
+            }
+        } else {
+            savers.push(
+              // @ts-ignore
+              new _config.gamePlatform());
         }
         this.analyticsHandler = new AnalyticsHandler(
             analyticsModules
@@ -506,6 +631,11 @@ export class Engine {
             this.saveHandler.getLatestData = _config.getLatestData;
         }
         this.saveHandler.autoSave = _config.autoSave || -1;
+        PlayerDataSingleton.initialize(
+            _config.playerDataKeys,
+            await this.saveHandler.load(_config.playerDataKeys)
+        );
+        this.saveHandler.allowedToSave = true;
 
         if (!_config.autoStart) {
             this.getTicker().stop();
@@ -528,20 +658,14 @@ export class Engine {
             console.log(`
 WhiskerWeb v%s
 
-    /\\_____/\\
-   /  o   o  \\
-  ( ==  ^  == )
-   )         (
-  (           )
- ( (  )   (  ) )
-(__(__)___(__)__)
-
 Engine: %O
 Render mode: %s
 Engine.ticker: %O
 Engine.stateManager: %O
 Engine.renderManager: %O
 Engine.loader: %O
+
+${LogoAscii}
 `,
                 __WWVERSION,
                 this,
@@ -591,7 +715,7 @@ Engine.loader: %O
             })
             .then(() => this.changeState(_initialState))
             .then(() => (_config.autoHideLoadingScreen &&
-                this._loadingScrObject) ? (this._loadingScrObject.visible = false) : null)
+                this.loadingScreenObject) ? (this.loadingScreenObject.visible = false) : null)
             .catch((err) => {
                 // Fatal!
                 console.error(err);
@@ -604,46 +728,11 @@ Engine.loader: %O
         ]);
     }
 
-    public recordLoadtime(_name?: string, _force?: boolean): Promise<void> {
-        // const-guarded/written this way to support tree-shaking easier
-        if (LOADTIME_DEBUG_MODE) {
-            if(!_force) {
-                return HelperFunctions.wait(1).then(() => {
-                    this.loadtimeMeasurer.recordLoadtime(_name);
-                });
-            } else {
-                this.loadtimeMeasurer.recordLoadtime(_name);
-            }
-        }
-        return Promise.resolve();
-    }
-
-    public alertLoadtime(): void {
-        if (LOADTIME_DEBUG_MODE) {
-            alert(this.exportLoadtimeAsString());
-        }
-    }
-
-    public exportLoadtimeAsString(): string {
-        if (LOADTIME_DEBUG_MODE) {
-            return this.loadtimeMeasurer.exportLoadtime();
-        }
-    }
-
-    public onResize(): void {
-        this.resizeRenderer(
-            window.innerWidth,
-            window.innerHeight,
-            this._autoResizeVal
-        );
-        this.getActiveState()?.onResize?.(this);
-    }
-
-    private hookResize(): void {
-        window.addEventListener('resize', this.onResize);
-        this.onResize();
-    }
-
+    /**
+     * Loads the specified assets using the specified loaders
+     * @param _assets
+     * @param _onProgress (optional) Callback for loading progress
+     */
     public loadAssets(_assets: Array<{key: string, path: string, type: LoaderType}>, _onProgress?: (_prog: number) => void): Promise<void> {
         if(this._loadAssetsPromise) {
             return this._loadAssetsPromise.then(() => this.loadAssets(_assets, _onProgress));
@@ -720,6 +809,44 @@ Engine.loader: %O
             }).catch(_reject);
 
         });
+    }
+
+    private static hideFontPreload(): void {
+        const collection: HTMLCollection =
+            document.getElementsByClassName("fontPreload");
+
+        // tslint:disable-next-line:prefer-for-of
+        for (let i: number = collection.length - 1; i >= 0; i--) {
+            collection[i].parentNode.removeChild(collection[i]);
+        }
+    }
+
+    private hookResize(): void {
+        window.addEventListener('resize', () => this.onResize());
+        this.onResize();
+    }
+
+    private _setupHookOnError(): void {
+        window.onunhandledrejection = (
+            e: PromiseRejectionEvent
+        ) => {
+            this._onPromiseRejectionFunctions.forEach((_f) => _f(e));
+        };
+        window.onerror = (
+            _msg,
+            _url,
+            _lineNo,
+            _columnNo,
+            _error
+        ) => {
+            this._onErrorFunctions.forEach((_f) => _f(
+                _msg,
+                _url,
+                _lineNo,
+                _columnNo,
+                _error
+            ));
+        };
     }
 
     private readonly mainLoop: () => void = () => {

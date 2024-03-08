@@ -29,7 +29,7 @@ export class SaveHandler {
         if (this.allowedToSave && Boolean(this.autoSave) && !this._saveIntervalID) {
             this._saveIntervalID = setInterval(() => {
                 if (this.allowedToSave && PlayerDataSingleton.isDirty()) {
-                    // fixme: GAME CODE IN ENGINE CODE; sorry but deadlines :(
+                    console.log("Autosaving...");
                     this.save(PlayerDataSingleton.export())
                         .catch((err) => {
                             console.error("Failed to autosave!");

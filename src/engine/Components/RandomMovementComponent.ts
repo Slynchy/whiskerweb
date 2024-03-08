@@ -1,5 +1,7 @@
-import { Component, IVector2, System } from "../../../index";
 import { RandomMovementSystem } from "../Systems/RandomMovementSystem";
+import { Component } from "../Component";
+import { System } from "../Systems/System";
+import { IVector2 } from "../Types/IVector2";
 
 export interface IRandomMovementConfig {
     distance: number;

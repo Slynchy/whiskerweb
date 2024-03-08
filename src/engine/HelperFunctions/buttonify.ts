@@ -1,5 +1,5 @@
 import {Container, FederatedEvent as PIXIInteractionEvent} from "pixi.js";
-import {HelperFunctions} from "../../../index";
+import {HelperFunctions} from "../HelperFunctions";
 import isMobile from "is-mobile";
 import {isTouchDevice} from "./isTouchDevice";
 

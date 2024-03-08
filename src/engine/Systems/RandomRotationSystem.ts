@@ -1,4 +1,4 @@
-import { Component, HelperFunctions, System } from "../../../index";
+import { Component, HelperFunctions, System } from "../../index";
 import { ENGINE_DEBUG_MODE } from "../Constants/Constants";
 import { RandomRotationComponent } from "../Components/RandomRotationComponent";
 import { smoothDampVec } from "../HelperFunctions/smoothDampVec";

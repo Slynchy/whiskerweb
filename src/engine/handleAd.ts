@@ -1,7 +1,7 @@
 import { AD_DEBUG } from "./Constants/Constants";
 import { ANALYTICS_AD_TYPES } from "./Analytics/AnalyticsAdTypes";
 import { AD_TYPE } from "./Types/AdType";
-import { Engine } from "../../index";
+import { Engine } from "../index";
 import { AdPlacements } from "./Types/AdPlacements";
 
 let promiseCacheForInterstitials: Promise<boolean> = null;

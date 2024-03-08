@@ -1,7 +1,8 @@
 import { IData } from "../engine/Types/IData";
 import { SCALE_MODE } from "pixi.js";
-import { Component } from "../../index";
+import { Component } from "../engine/Component";
 import { LoaderType } from "../engine/Loaders/LoaderType";
+import { PlatformSDK } from "../engine/PlatformSDKs/PlatformSDK";
 
 export type TWhiskerConfig = {
   renderType?: "webgpu" | "webgl";
@@ -17,11 +18,12 @@ export type TWhiskerConfig = {
   sharedTicker: boolean;
   sharedLoader: boolean;
   autoStart: boolean;
+  playerDataKeys: string[];
   defaultCameraType?: "perspective" | "orthographic";
   devicePixelRatio: number;
   autoResize: "either" | "width" | "height" | "none";
   // maintainResolution: boolean; // if true, continue using config resolution even if canvas size changes
-  gamePlatform: "offline" | "capacitor"
+  gamePlatform: "offline" | "capacitor" | typeof PlatformSDK;
   autoSave: number | 0, // if >0, then save every specified milliseconds
   getLatestData: (e: IData[]) => IData,
   logErrors: "none" | "firebase" | "sentry", // sentry not yet supported
@@ -32,12 +34,5 @@ export type TWhiskerConfig = {
   pauseOnFocusLoss: boolean,
   autoInitAnalytics: boolean,
   // autoLoadState: State | null,
-
-  // DEPRECATED
-  // transparent: boolean; // deprecated since pixi v6
-  // scale3D?: {
-  //   mobile: number,
-  //   desktop: number,
-  // }; // how much to scale the width/height for the 3D renderer
 };
 

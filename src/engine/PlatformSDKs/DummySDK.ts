@@ -43,7 +43,7 @@ export class DummySDK extends PlatformSDK {
     }
 
     public setLoadingProgress(_progress: number): Promise<void> {
-        const obj = ENGINE["_loadingScrObject"];
+        const obj = ENGINE["loadingScreenObject"];
         if(
             obj &&
             // @ts-ignore

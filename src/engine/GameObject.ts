@@ -14,7 +14,7 @@ const LOG_ACTIVITY_CHANGE = false;
 
 export class GameObject extends Container {
 
-    public name: string = "GameObject";
+    public label: string = "GameObject";
     protected _active: boolean = true;
     private components: Component[] = [];
     private _onDestroy: { [key: string]: Function; } = {};
@@ -22,10 +22,10 @@ export class GameObject extends Container {
     private _onAddComponent: { [key: string]: Function; } = {};
     private _onRemoveComponent: { [key: string]: Function; } = {};
 
-    constructor(name?: string, components?: Component[]) {
+    constructor(label?: string, components?: Component[]) {
         super();
-        if (name)
-            this.name = name;
+        if (label)
+            this.label = label;
         if (components) {
             components.forEach((e) => this.addComponent(e));
         }

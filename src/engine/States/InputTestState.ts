@@ -3,7 +3,7 @@ import {Engine} from "../Engine";
 import {Container, Graphics, Sprite, Texture} from "pixi.js";
 import {buttonify} from "../HelperFunctions/buttonify";
 import {IVector2} from "../Types/IVector2";
-import {HelperFunctions} from "../../../index";
+import {HelperFunctions} from "../HelperFunctions";
 import {Easing} from "@tweenjs/tween.js";
 
 export class InputTestState extends State {
