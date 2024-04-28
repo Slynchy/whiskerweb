@@ -46,3 +46,13 @@ export { uid } from "./engine/HelperFunctions/uid";
 export {TWEENDirection, TWEENFunctions} from "./engine/HelperFunctions/TWEENFunctions";
 
 export { DummySDK } from "./engine/PlatformSDKs/DummySDK";
+
+// pixi stuff
+export { Graphics } from "pixi.js";
+export { Text } from "pixi.js";
+export { TextStyle } from "pixi.js";
+export { Sprite } from "pixi.js";
+export { Container } from "pixi.js";
+export { AnimatedSprite } from "pixi.js";
+
+export * as Helpers from "./engine/HelperFunctions/index";

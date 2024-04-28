@@ -5,15 +5,13 @@ import {
     Spritesheet,
     Texture as PIXITexture,
     Ticker as PIXITicker,
-    SCALE_MODE, WebGLRenderer
+    SCALE_MODE, WebGLRenderer, Texture
 } from "pixi.js";
 import { RenderManager } from "./RenderManager";
 import { PIXILoader } from "./Loaders/PIXILoader";
 import { TWhiskerConfig } from "../config/whiskerConfig";
 import {
     __WWVERSION,
-    DEFAULT_CAMERA_FOV,
-    DEFAULT_TEXTURE_B64,
     ENGINE_DEBUG_MODE,
     LOADTIME_DEBUG_MODE
 } from "./Constants/Constants";
@@ -32,25 +30,19 @@ import { GameObject } from "./GameObject";
 import { HelperFunctions } from "./HelperFunctions";
 import { FirebaseSingleton } from "./FirebaseSingleton";
 import { FirebaseFeatures } from "./Types/FirebaseFeatures";
-import { isWebPSupported } from "./HelperFunctions/isWebPSupported";
 import { PlayerDataSingleton } from "./PlayerDataSingleton";
 import { AdIDs } from "./Constants/AdIDs";
 import { LoaderType } from "./Loaders/LoaderType";
 import { AdPlacements } from "./Types/AdPlacements";
-// import { Camera, OrthographicCamera, PerspectiveCamera, Texture as ThreeTexture, WebGLRenderer } from "three";
 import isMobile from "is-mobile";
-// import { EffectComposer, Pass } from "three/examples/jsm/postprocessing/EffectComposer";
-// import WEBGL from "three/examples/jsm/capabilities/WebGL";
 import { JSONLoader } from "./Loaders/JSONLoader";
 import { WASMLoader } from "./Loaders/WASMLoader";
 import { GameAnalytics } from "./Analytics/GameAnalytics";
-import {DEPRECATED_SCALE_MODES} from "pixi.js/lib/rendering/renderers/shared/texture/const";
 import {CapacitorSDK} from "./PlatformSDKs/CapacitorSDK";
 import { LogoAscii } from "../config/ascii";
+import InputManager from "./InputManager";
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Stats = require('stats.js');
-
-// const ENABLE_3D: boolean = false;
 
 declare global {
     const ENGINE: Engine;
@@ -71,6 +63,7 @@ export class Engine {
     private readonly wasmLoader: WASMLoader;
     private readonly renderManager: RenderManager;
     private readonly stage: Container;
+    private readonly inputManager: InputManager;
     private saveHandler: SaveHandler;
     private analyticsHandler: AnalyticsHandler;
     private platformSdk: PlatformSDK;
@@ -115,6 +108,7 @@ export class Engine {
         this.ticker = new PIXITicker();
         this.stateManager = new StateManager(this);
         this.renderManager = new RenderManager(this);
+        this.inputManager = new InputManager();
 
         this.loader = new PIXILoader();
         this.jsonLoader = new JSONLoader();
@@ -152,6 +146,10 @@ export class Engine {
 
     public get platformSDK(): PlatformSDK {
         return this.platformSdk;
+    }
+
+    public getInputManager(): InputManager {
+        return this.inputManager;
     }
 
     public getSaveHandler(): SaveHandler {
@@ -214,7 +212,7 @@ export class Engine {
      * @param _key
      */
     public getTexture(_key: string): PIXITexture {
-        return this.loader.has(_key) ? this.loader.get(_key) : null;
+        return this.loader.has(_key) ? this.loader.get(_key) : (console.warn("Failed to find texture %s", _key) as unknown as boolean && Texture.WHITE) as Texture;
     }
 
     /**
@@ -521,6 +519,7 @@ export class Engine {
         _config: TWhiskerConfig,
         _onProgress?: (_val: number) => void
     ): Promise<unknown> {
+        await this.inputManager.initialize();
         this._adjustHeightForBannerAd = _config.adjustHeightForBannerAd || false;
         this.pauseOnFocusLoss = _config.pauseOnFocusLoss || false;
         this.setScaleMode(_config.scaleMode);
