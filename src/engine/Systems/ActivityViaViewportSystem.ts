@@ -21,7 +21,7 @@ export class ActivityViaViewportSystem extends System {
                 (
                     _component["_viewportRef"]
                 ).intersects(
-                    _component.parent.getBounds()
+                    _component.parent.getBounds().rectangle
                 ),
                 _component["_recursive"]
             );

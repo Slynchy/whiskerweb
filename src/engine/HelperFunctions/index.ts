@@ -12,6 +12,7 @@ export { formatTimestampAsWeekday } from "./formatTImestampAsWeekday";
 export { formatTimestampToHHMM } from "./formatTimestampToHHMM";
 export { formatTimestampToHHMMSS } from "./formatTimestampToHHMMSS";
 export * as fullscreenFunctions from "./fullscreenFunctions";
+export { getAngleBetweenTwoPoints } from "./getAngleBetweenTwoPoints";
 export { getNearest4to3Resolution } from "./getNearest4to3Resolution";
 export { getPositionRelativeToParent } from "./getPositionRelativeToParent";
 export { getScreenSpacePosition } from "./getScreenSpacePosition";
