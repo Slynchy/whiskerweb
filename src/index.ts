@@ -14,7 +14,6 @@ export { ENGINE_ERROR } from "./engine/ErrorCodes/EngineErrorCodes";
 export { PlayerDataSingleton } from "./engine/PlayerDataSingleton";
 
 export { StressTestState } from "./engine/States/StressTestState";
-// export { InputTestState } from "./engine/States/InputTestState";
 
 export { NODE } from "./engine/ModularPathFinding/Node";
 export { PathAlgo } from "./engine/ModularPathFinding/PathAlgo";
@@ -43,6 +42,7 @@ export { LoaderType } from "./engine/Loaders/LoaderType";
 export { HelperFunctions } from "./engine/HelperFunctions";
 export { buttonify } from "./engine/HelperFunctions/buttonify";
 export { uid } from "./engine/HelperFunctions/uid";
+export * as FullscreenFunctions from "./engine/HelperFunctions/fullscreenFunctions";
 export {
   TWEENDirection,
   TWEENFunctions,
@@ -61,6 +61,7 @@ export { Container } from "pixi.js";
 export { AnimatedSprite } from "pixi.js";
 export { Spritesheet } from "pixi.js";
 export { Texture } from "pixi.js";
+export { Rectangle } from "pixi.js";
 export * as Filters from "pixi-filters";
 
 export * as Helpers from "./engine/HelperFunctions/index";

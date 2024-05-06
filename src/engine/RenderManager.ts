@@ -75,6 +75,7 @@ export class RenderManager {
       backgroundAlpha: _config.backgroundAlpha,
       antialias: _config.antialias,
       backgroundColor: _config.backgroundColor,
+      resolution: _config.devicePixelRatio || 1,
       roundPixels: _config.roundPixels || false,
     };
     // DOMAdapter.set(WebWorkerAdapter);
@@ -105,7 +106,7 @@ export class RenderManager {
     };
 
     if (ENGINE_DEBUG_MODE) {
-      this.createDebugGrid();
+      // this.createDebugGrid();
     }
   }
 

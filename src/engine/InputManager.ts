@@ -1,7 +1,13 @@
 class InputManager {
-  private keyStates: Map<string, { isDown: boolean, startTime: number }> = new Map();
-  private mouseButtonStates: Map<number, { isDown: boolean, startTime: number }> = new Map();
-  private mousePosition: { x: number, y: number } = { x: 0, y: 0 };
+  private keyStates: Map<string, { isDown: boolean; startTime: number }> =
+    new Map();
+  private mouseButtonStates: Map<
+    number,
+    { isDown: boolean; startTime: number }
+  > = new Map();
+  private pointerStates: Map<number, { isDown: boolean; startTime: number }> =
+    new Map();
+  private mousePosition: { x: number; y: number } = { x: 0, y: 0 };
 
   private _initialized: boolean = false;
   private _killFunction: () => void;
@@ -18,17 +24,21 @@ class InputManager {
     const handleMouseDown = this.handleMouseDown.bind(this);
     const handleMouseUp = this.handleMouseUp.bind(this);
     const handleMouseMove = this.handleMouseMove.bind(this);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('mousemove', handleMouseMove);
+    const handlePointerDown = this.handlePointerDown.bind(this);
+    const handlePointerUp = this.handlePointerUp.bind(this);
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    window.addEventListener("mousedown", handleMouseDown);
+    window.addEventListener("mouseup", handleMouseUp);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("pointerup", handlePointerUp);
     this._killFunction = () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("mousedown", handleMouseDown);
+      window.removeEventListener("mouseup", handleMouseUp);
+      window.removeEventListener("mousemove", handleMouseMove);
     };
     return Promise.resolve();
   }
@@ -56,7 +66,30 @@ class InputManager {
   }
 
   private handleMouseDown(event: MouseEvent): void {
-    this.mouseButtonStates.set(event.button, { isDown: true, startTime: performance.now() });
+    this.mouseButtonStates.set(event.button, {
+      isDown: true,
+      startTime: performance.now(),
+    });
+  }
+
+  private handlePointerDown(event: PointerEvent): void {
+    this.pointerStates.set(event.button, {
+      isDown: true,
+      startTime: performance.now(),
+    });
+  }
+
+  private handlePointerUp(event: PointerEvent): void {
+    const buttonState = this.pointerStates.get(event.button);
+    if (buttonState && buttonState.isDown) {
+      const duration = performance.now() - buttonState.startTime;
+      console.log(`Pointer button ${event.button} was held for ${duration} ms`);
+      this.pointerStates.set(event.button, { isDown: false, startTime: 0 });
+    }
+  }
+
+  public isPointerDown(ind?: number): boolean {
+    return this.pointerStates.get(ind || 0)?.isDown || false;
   }
 
   private handleMouseUp(event: MouseEvent): void {
@@ -80,7 +113,7 @@ class InputManager {
     return this.mouseButtonStates.get(button)?.isDown || false;
   }
 
-  public getMousePosition(): { x: number, y: number } {
+  public getMousePosition(): { x: number; y: number } {
     return this.mousePosition;
   }
 }

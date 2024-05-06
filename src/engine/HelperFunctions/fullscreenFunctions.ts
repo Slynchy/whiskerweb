@@ -5,36 +5,42 @@ import { Renderer } from "pixi.js";
 let _isFullscreen: boolean = false;
 
 export function getIsFullscreen(): boolean {
-    return _isFullscreen;
+  return _isFullscreen;
 }
 
 const elem: {
-    requestFullscreen?: Function
-    webkitRequestFullscreen?: Function
-    msRequestFullscreen?: Function
-    exitFullscreen?: Function
-    webkitExitFullscreen?: Function
-    msExitFullscreen?: Function
+  requestFullscreen?: Function;
+  webkitRequestFullscreen?: Function;
+  msRequestFullscreen?: Function;
+  exitFullscreen?: Function;
+  webkitExitFullscreen?: Function;
+  msExitFullscreen?: Function;
 } = document.documentElement;
 
 export function openFullscreen(): Promise<void> {
-    console.warn("openFullscreen not working in pixi v8");
-    return Promise.resolve();
+  const canvas: any = document.getElementById("ui-canvas");
+  if (canvas.requestFullscreen) canvas.requestFullscreen();
+  else if (canvas["webkitRequestFullScreen"])
+    canvas["webkitRequestFullScreen"]();
+  else if (canvas["mozRequestFullScreen"]) canvas["mozRequestFullScreen"]();
+  return Promise.resolve();
 }
 
 /* Close fullscreen */
 export function closeFullscreen(): void {
-    try {
-        const _document: typeof elem = document;
-        if (_document.exitFullscreen) {
-            _document.exitFullscreen();
-        } else if (_document.webkitExitFullscreen) { /* Safari */
-            _document.webkitExitFullscreen();
-        } else if (_document.msExitFullscreen) { /* IE11 */
-            _document.msExitFullscreen();
-        }
-    } catch(err) {
-        console.warn(err);
+  try {
+    const _document: typeof elem = document;
+    if (_document.exitFullscreen) {
+      _document.exitFullscreen();
+    } else if (_document.webkitExitFullscreen) {
+      /* Safari */
+      _document.webkitExitFullscreen();
+    } else if (_document.msExitFullscreen) {
+      /* IE11 */
+      _document.msExitFullscreen();
     }
-    _isFullscreen = false;
+  } catch (err) {
+    console.warn(err);
+  }
+  _isFullscreen = false;
 }

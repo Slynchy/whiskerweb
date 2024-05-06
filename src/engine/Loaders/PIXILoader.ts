@@ -55,7 +55,7 @@ export class PIXILoader extends Loader<Texture> {
   async load(
     _onProgress?: (progress: number) => void,
   ): Promise<ILoaderReturnValue> {
-    return this.loader.load(this._currentQueue).then((t) => {
+    return this.loader.load(this._currentQueue, _onProgress).then((t) => {
       const res: ILoaderReturnValue = {};
       this._currentQueue.forEach((e) => {
         res[e] = {
