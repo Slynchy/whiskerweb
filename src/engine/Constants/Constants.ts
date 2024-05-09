@@ -1,5 +1,5 @@
 export const __WWPRODUCTION: boolean = true;
-export const __WWVERSION: string = "0.5.1";
+export const __WWVERSION: string = "0.5.2";
 
 export const ENGINE_DEBUG_MODE: boolean = !__WWPRODUCTION;
 export const SCENE_DEBUG_MODE: boolean = false;
