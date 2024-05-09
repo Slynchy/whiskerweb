@@ -1,5 +1,5 @@
-export const __WWPRODUCTION: boolean = false;
-export const __WWVERSION: string = "0.4.1";
+export const __WWPRODUCTION: boolean = true;
+export const __WWVERSION: string = "0.5.0";
 
 export const ENGINE_DEBUG_MODE: boolean = !__WWPRODUCTION;
 export const SCENE_DEBUG_MODE: boolean = false;
@@ -12,10 +12,10 @@ export const PUPPETEER_MODE: boolean = false;
 export const ENABLE_CHEATS: boolean = true;
 
 export const DEFAULT_TEXTURE_B64 =
-    `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAAC` +
-    `CAYAAABytg0kAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAA` +
-    `AJcEhZcwAADsIAAA7CARUoSoAAAAAYSURBVBhXY/gf8P8/AwPDf0YQ` +
-    `8T/gPwMASMgHm0SkFZgAAAAASUVORK5CYII=`;
+  `data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAAC` +
+  `CAYAAABytg0kAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAA` +
+  `AJcEhZcwAADsIAAA7CARUoSoAAAAAYSURBVBhXY/gf8P8/AwPDf0YQ` +
+  `8T/gPwMASMgHm0SkFZgAAAAASUVORK5CYII=`;
 
 export const DEFAULT_CAMERA_FOV: number = 40;
 
