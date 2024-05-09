@@ -352,7 +352,7 @@ export class Engine {
       this.renderManager.getRenderer(),
     );
     if (ENGINE_DEBUG_MODE) {
-      // this.renderManager.createDebugGrid();
+      this.renderManager.createDebugGrid();
     }
   }
 
@@ -482,6 +482,7 @@ export class Engine {
    * Function that is called when a resize event is called, or to force a resize
    */
   public onResize(): void {
+    console.log("Resize triggered");
     this.resizeRenderer(window.innerWidth, window.innerHeight, this.autoResize);
     this.getActiveState()?.onResize?.(this);
   }

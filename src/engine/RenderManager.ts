@@ -124,8 +124,11 @@ export class RenderManager {
     _engine: Engine,
     _renderer: Renderer,
   ): void {
-    _renderer.resize(_w, _h);
-    AbstractRenderer.defaultOptions.resolution = 1;
+    AbstractRenderer.defaultOptions.resolution = window.devicePixelRatio;
+    _renderer.resize(
+      _w * (1 / AbstractRenderer.defaultOptions.resolution),
+      _h * (1 / AbstractRenderer.defaultOptions.resolution),
+    );
 
     const height = _h - (_engine["_adjustHeightForBannerAd"] ? 60 : 0);
     const windowHeight =

@@ -22,7 +22,7 @@ export type TWhiskerConfig = {
   playerDataKeys: string[];
   defaultCameraType?: "perspective" | "orthographic";
   devicePixelRatio: number;
-  autoResize: "either" | "width" | "height" | "none";
+  autoResize: "auto" | "either" | "width" | "height" | "none";
   // maintainResolution: boolean; // if true, continue using config resolution even if canvas size changes
   gamePlatform: "offline" | "capacitor" | typeof PlatformSDK;
   autoSave: number | 0; // if >0, then save every specified milliseconds
