@@ -14,14 +14,8 @@
     "lint": "eslint ./src --ext .ts"
   },
   "keywords": [
-    "typescript",
-    "pixi",
-    "pixijs",
-    "2D",
-    "js",
-    "ts",
-    "javascript",
-    "framework"
+    "typescript", "pixi", "pixijs", "2D", "js", "ts", "ecs",
+    "component", "entity", "system", "javascript", "framework"
   ],
   "author": "Sam Lynch",
   "license": "MIT",
