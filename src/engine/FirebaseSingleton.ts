@@ -1,10 +1,9 @@
-// import firebase from "firebase/compat";
 import { FirebaseApp, initializeApp } from "firebase/app";
 import { Auth as FirebaseAuth, getAuth, signInWithCustomToken } from "firebase/auth";
 import { Analytics as FirebaseAnalytics, getAnalytics } from "firebase/analytics";
 import { FirebaseFeatures } from "./Types/FirebaseFeatures";
 import { Functions as FirebaseFunctions, getFunctions, httpsCallable } from "firebase/functions";
-import firebase from "firebase/compat";
+import firebase from "firebase/compat/app";
 import { ENGINE_DEBUG_MODE } from "./Constants/Constants";
 import HttpsCallableResult = firebase.functions.HttpsCallableResult;
 
