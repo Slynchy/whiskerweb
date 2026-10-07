@@ -22,9 +22,9 @@ export type TWhiskerConfig = {
   playerDataKeys: string[];
   defaultCameraType?: "perspective" | "orthographic";
   devicePixelRatio: number;
-  autoResize: "auto" | "either" | "width" | "height" | "none";
+  autoResize: "auto" | "either" | "width" | "height" | "none"; // "auto" behaves the same as "either"
   // maintainResolution: boolean; // if true, continue using config resolution even if canvas size changes
-  gamePlatform: "offline" | "capacitor" | typeof PlatformSDK;
+  gamePlatform: "offline" | "capacitor" | (new () => PlatformSDK); // or a custom PlatformSDK subclass
   autoSave: number | 0; // if >0, then save every specified milliseconds
   getLatestData: (e: IData[]) => IData;
   logErrors: "none" | "firebase" | "sentry"; // sentry not yet supported

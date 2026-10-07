@@ -77,6 +77,11 @@ export class RenderManager {
       backgroundColor: _config.backgroundColor,
       resolution: _config.devicePixelRatio || 1,
       roundPixels: _config.roundPixels || false,
+      width: _config.width,
+      height: _config.height,
+      // Keep the canvas CSS size equal to the stage size (1 stage unit = 1 CSS pixel),
+      // so the resolution only affects sharpness, never on-screen size
+      autoDensity: true,
     };
     // DOMAdapter.set(WebWorkerAdapter);
     this.renderer2d = await autoDetectRenderer(settings)
@@ -110,12 +115,19 @@ export class RenderManager {
     }
   }
 
+  /**
+   * Width of the visible stage area, in the same units used to position objects
+   * (CSS pixels; not multiplied by resolution).
+   */
   public get width(): number {
-    return this.renderer2d.width * this.renderer2d.resolution;
+    return this.renderer2d.screen.width;
   }
 
+  /**
+   * Height of the visible stage area, in the same units used to position objects.
+   */
   public get height(): number {
-    return this.renderer2d.height * this.renderer2d.resolution;
+    return this.renderer2d.screen.height;
   }
 
   public static configureRenderer2d(
@@ -124,11 +136,12 @@ export class RenderManager {
     _engine: Engine,
     _renderer: Renderer,
   ): void {
-    AbstractRenderer.defaultOptions.resolution = window.devicePixelRatio;
-    _renderer.resize(
-      _w * (1 / AbstractRenderer.defaultOptions.resolution),
-      _h * (1 / AbstractRenderer.defaultOptions.resolution),
-    );
+    // The stage is sized in CSS pixels so objects look the same size at any devicePixelRatio;
+    // the canvas backing store is rendered at devicePixelRatio, so higher DPR = sharper, not bigger.
+    // Reading the live value keeps it sharp after browser zoom or moving to another monitor.
+    const resolution = window.devicePixelRatio || 1;
+    AbstractRenderer.defaultOptions.resolution = resolution;
+    _renderer.resize(_w, _h, resolution);
 
     const height = _h - (_engine["_adjustHeightForBannerAd"] ? 60 : 0);
     const windowHeight =

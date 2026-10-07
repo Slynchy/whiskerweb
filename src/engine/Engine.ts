@@ -211,14 +211,14 @@ export class Engine {
   /**
    * Get a loaded PIXI texture from cache
    * @param _key
+   * @returns The texture, or `Texture.EMPTY` (with a warning) if it isn't loaded
    */
   public getTexture(_key: string): PIXITexture {
-    return this.loader.has(_key)
-      ? this.loader.get(_key)
-      : (((console.warn(
-          "Failed to find texture %s",
-          _key,
-        ) as unknown as boolean) && Texture.WHITE) as Texture);
+    if (this.loader.has(_key)) {
+      return this.loader.get(_key);
+    }
+    console.warn("Failed to find texture %s", _key);
+    return Texture.EMPTY;
   }
 
   /**
@@ -542,8 +542,10 @@ export class Engine {
     this._adjustHeightForBannerAd = _config.adjustHeightForBannerAd || false;
     this.pauseOnFocusLoss = _config.pauseOnFocusLoss || false;
     this.setScaleMode(_config.scaleMode);
-    if (_config.autoResize === "either") {
+    if (_config.autoResize === "either" || _config.autoResize === "auto") {
       this.autoResize = _config.height > _config.width ? "height" : "width";
+    } else {
+      this.autoResize = _config.autoResize;
     }
 
     // init firebase
@@ -602,18 +604,6 @@ export class Engine {
     this.renderManager.init(this, _config);
     if (_config.autoResize !== "none") this.hookResize();
 
-    if (_config.pauseOnFocusLoss) {
-      let focusLost = false;
-      ENGINE.platformSDK.addOnPauseCallback(() => {
-        ENGINE.getTicker().stop();
-        focusLost = true;
-      });
-      ENGINE.platformSDK.addOnResumeCallback(() => {
-        if (focusLost) return;
-        ENGINE.getTicker().start();
-      });
-    }
-
     const analyticsModules: BaseAnalytics[] = [];
     const savers: Saver[] = [];
     if (typeof _config.gamePlatform === "string") {
@@ -631,11 +621,29 @@ export class Engine {
           break;
       }
     } else {
-      savers.push(
-        // @ts-ignore
-        new _config.gamePlatform(),
-      );
+      // custom PlatformSDK subclass
+      savers.push(new LocalStorageSaver());
+      this.platformSdk = new _config.gamePlatform();
+      analyticsModules.push(new GameAnalytics());
     }
+
+    // Must come after the platform SDK exists, since the callbacks are registered on it
+    if (_config.pauseOnFocusLoss) {
+      // Only resume the ticker if it was running when focus was lost,
+      // so we never start a ticker the game hasn't started itself
+      let resumeOnFocus = false;
+      this.platformSdk.addOnPauseCallback(() => {
+        if (!this.ticker.started) return;
+        this.ticker.stop();
+        resumeOnFocus = true;
+      });
+      this.platformSdk.addOnResumeCallback(() => {
+        if (!resumeOnFocus) return;
+        resumeOnFocus = false;
+        this.ticker.start();
+      });
+    }
+
     this.analyticsHandler = new AnalyticsHandler(analyticsModules);
     if (_config.autoInitAnalytics) {
       this.analyticsHandler.initialize();
