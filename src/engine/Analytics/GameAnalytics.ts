@@ -1,6 +1,6 @@
 import { BaseAnalytics } from "./BaseAnalytics";
 import { GameAnalytics as GA } from "gameanalytics";
-import {__WWVERSION} from "../Constants/Constants";
+import { __WWVERSION } from "../Constants/Version";
 
 export class GameAnalytics extends BaseAnalytics {
     constructor() {

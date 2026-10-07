@@ -13,10 +13,10 @@ import { RenderManager } from "./RenderManager";
 import { PIXILoader } from "./Loaders/PIXILoader";
 import { TWhiskerConfig } from "../config/whiskerConfig";
 import {
-  __WWVERSION,
   ENGINE_DEBUG_MODE,
   LOADTIME_DEBUG_MODE,
 } from "./Constants/Constants";
+import { __WWVERSION } from "./Constants/Version";
 import { ENGINE_ERROR } from "./ErrorCodes/EngineErrorCodes";
 import * as TWEEN from "@tweenjs/tween.js";
 import { PlatformSDK } from "./PlatformSDKs/PlatformSDK";
