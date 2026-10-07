@@ -8,7 +8,7 @@ export { deltaAngle } from "./deltaAngle";
 export { formatCurrentTime } from "./formatCurrentTime";
 export { formatDateForCookie } from "./formatDateForCookie";
 export { formatTimestampAs12HrClock } from "./formatTimestampAs12HrClock";
-export { formatTimestampAsWeekday } from "./formatTImestampAsWeekday";
+export { formatTimestampAsWeekday } from "./formatTimestampAsWeekday";
 export { formatTimestampToHHMM } from "./formatTimestampToHHMM";
 export { formatTimestampToHHMMSS } from "./formatTimestampToHHMMSS";
 export * as fullscreenFunctions from "./fullscreenFunctions";
