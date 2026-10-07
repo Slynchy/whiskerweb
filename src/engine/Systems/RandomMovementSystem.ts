@@ -1,4 +1,6 @@
-import { Component, HelperFunctions, System } from "../../index";
+import { Component } from "../Component";
+import { HelperFunctions } from "../HelperFunctions";
+import { System } from "./System";
 import { ENGINE_DEBUG_MODE } from "../Constants/Constants";
 import { RandomMovementComponent } from "../Components/RandomMovementComponent";
 import { randomPointInsideUnitCircle } from "../HelperFunctions/randomPointInsideUnitCircle";
