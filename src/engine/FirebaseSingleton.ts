@@ -1,22 +1,11 @@
-import { FirebaseApp, initializeApp } from "firebase/app";
+import { FirebaseApp, FirebaseOptions, initializeApp } from "firebase/app";
 import { Auth as FirebaseAuth, getAuth, signInWithCustomToken } from "firebase/auth";
 import { Analytics as FirebaseAnalytics, getAnalytics } from "firebase/analytics";
 import { FirebaseFeatures } from "./Types/FirebaseFeatures";
 import { Functions as FirebaseFunctions, getFunctions, httpsCallable } from "firebase/functions";
-import firebase from "firebase/compat/app";
+// Type-only, from the modular SDK: importing firebase/compat/app here would bundle the whole compat layer
+import type { HttpsCallableResult } from "firebase/functions";
 import { ENGINE_DEBUG_MODE } from "./Constants/Constants";
-import HttpsCallableResult = firebase.functions.HttpsCallableResult;
-
-const FIREBASE_CONFIG = {
-    apiKey: "",
-    authDomain: "",
-    projectId: "",
-    storageBucket: "",
-    databaseURL: "",
-    messagingSenderId: "",
-    appId: "",
-    measurementId: "",
-};
 
 enum RESULT_CODE {
     SUCCESS = 0,
@@ -57,12 +46,21 @@ class FirebaseModule {
         return Boolean(this._loggedIn);
     }
 
-    public initialize(features?: Array<FirebaseFeatures>): void {
+    /**
+     * Initializes the (default) Firebase app and the requested features. Call it once, before using the rest of
+     * this API or constructing a FirebaseAnalytics module with `getAnalytics()`.
+     * Throws if the app itself can't be initialized; a feature that fails to initialize (e.g. Analytics without an
+     * `appId`, or without both `apiKey` and `measurementId`) is logged and left unavailable.
+     * @param config The web app's Firebase config, from the Firebase console
+     * @param features The features to initialize; `FirebaseFeatures.RTDB` is not supported and is ignored
+     */
+    public initialize(config: FirebaseOptions, features?: Array<FirebaseFeatures>): void {
         if (this.initialized) {
             console.warn("FirebaseModule instance is already initialized");
+            return;
         }
 
-        this._app = initializeApp(FIREBASE_CONFIG);
+        this._app = initializeApp(config);
 
         if (ENGINE_DEBUG_MODE) {
             console.log("Firebase app initialized");
@@ -70,18 +68,28 @@ class FirebaseModule {
 
         if (features) {
             features.forEach((e) => {
-                switch (e) {
-                    case FirebaseFeatures.Analytics:
-                        this._analytics = getAnalytics(this._app);
-                        break;
-                    case FirebaseFeatures.Auth:
-                        this._auth = getAuth(this._app);
-                        break;
-                    case FirebaseFeatures.Functions:
-                        this._functions = getFunctions(this._app);
-                        break;
+                try {
+                    switch (e) {
+                        case FirebaseFeatures.Analytics:
+                            this._analytics = getAnalytics(this._app);
+                            break;
+                        case FirebaseFeatures.Auth:
+                            this._auth = getAuth(this._app);
+                            break;
+                        case FirebaseFeatures.Functions:
+                            this._functions = getFunctions(this._app);
+                            break;
+                        default:
+                            console.warn(`Firebase feature ${FirebaseFeatures[e] ?? e} is not supported; ignoring it`);
+                            return;
+                    }
+                } catch (err) {
+                    console.error(`Firebase feature ${FirebaseFeatures[e]} failed to initialize`, err);
+                    return;
                 }
-                this._availableFeatures.push(e);
+                if (!this._supportsFeature(e)) {
+                    this._availableFeatures.push(e);
+                }
             });
         }
 
@@ -98,7 +106,7 @@ class FirebaseModule {
         }
 
         const updateUserProgress = httpsCallable(this._functions, 'updateUserProgress');
-        const result: HttpsCallableResult =
+        const result: HttpsCallableResult<unknown> =
             await updateUserProgress({
                 userId: _userId,
                 userToken: _userToken,
@@ -129,8 +137,12 @@ class FirebaseModule {
             return Promise.reject(new Error("Cannot register; functions feature not available/initialized!"));
         }
 
-        const createFBToken = httpsCallable(this._functions, 'createFBToken');
-        let tokenResult: HttpsCallableResult;
+        const createFBToken = httpsCallable<unknown, {
+            result: RESULT_CODE, error: Error | void, token: string | void
+        }>(this._functions, 'createFBToken');
+        let tokenResult: HttpsCallableResult<{
+            result: RESULT_CODE, error: Error | void, token: string | void
+        }>;
         if (createFBToken) {
             tokenResult = await createFBToken({signature: signature, userId: userId})
                 .catch((err) => {
@@ -185,6 +197,10 @@ class FirebaseModule {
         this._loggedIn = true;
     }
 
+    /**
+     * The Firebase Analytics instance, for `new FirebaseAnalytics(...)`;
+     * null unless `initialize` was called with `FirebaseFeatures.Analytics` and it initialized successfully
+     */
     public getAnalytics(): FirebaseAnalytics {
         return this._analytics;
     }
@@ -194,25 +210,34 @@ class FirebaseModule {
         return this._auth.currentUser.getIdToken();
     }
 
+    /**
+     * Resolves with an empty array if the request fails; rejects if the Functions feature isn't initialized
+     * @param userId
+     * @param signature
+     */
     public async getFriendsProgress(
         userId: string,
         signature: string,
     ): Promise<Array<{ uid: string, progress: number }>> {
+        if (!this._supportsFeature(FirebaseFeatures.Functions)) {
+            return Promise.reject(new Error("Cannot get friends' progress; functions feature not available/initialized!"));
+        }
 
-        const getFriendsProgress = httpsCallable(this._functions, 'getFriendsProgress');
-        const friendProgressResult: HttpsCallableResult
+        const getFriendsProgress = httpsCallable<unknown, {
+            result: RESULT_CODE, error: string | void, friendProgress: { [key: string]: number }
+        }>(this._functions, 'getFriendsProgress');
+        const friendProgressResult
             = await getFriendsProgress({
-            signature: userId,
-            userId: signature,
+            signature: signature,
+            userId: userId,
         })
             .catch((err) => {
                 console.error(err);
                 return null;
             });
 
-        const friendProgressData: {
-            result: RESULT_CODE, error: string | void, friendProgress: { [key: string]: number }
-        } = friendProgressResult.data;
+        // null when the request failed (e.g. network error)
+        const friendProgressData = friendProgressResult ? friendProgressResult.data : null;
 
         if (friendProgressData && friendProgressData.friendProgress) {
             const keys = Object

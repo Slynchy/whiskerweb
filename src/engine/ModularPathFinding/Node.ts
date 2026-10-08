@@ -1,4 +1,4 @@
-import { IVector2 } from "../../index";
+import { IVector2 } from "../Types/IVector2";
 
 const DEFAULT_MOVE_COST: number = 1.0;
 
@@ -24,8 +24,8 @@ export class NODE {
     ) {
         this.x = x || 0;
         this.y = y || 0;
-        this.gcost = x || 0;
-        this.fcost = y || Infinity;
+        this.gcost = _gcost ?? 0;
+        this.fcost = _fcost ?? Infinity;
         this.h = _h || 0;
         this.cost = _cost || DEFAULT_MOVE_COST;
         this.isObstacle = isObstacle || false;

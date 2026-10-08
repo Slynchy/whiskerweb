@@ -21,18 +21,18 @@ export function smoothDampVec<T extends IVector3 | IVector2>(
     const omega = 2.0 / smoothTime;
     const x = omega * deltaTime;
     const exp = 1.0 / (1.0 + x + 0.48 * x * x + 0.235 * x * x * x);
+    // 2D input is treated as z = 0, so the overshoot test below isn't NaN
+    // @ts-ignore
+    const current_z: number = hasZ ? current.z : 0;
+    // @ts-ignore
+    const target_z: number = hasZ && typeof target.z === "number" ? target.z : 0;
     let change_x = current.x - target.x;
     let change_y = current.y - target.y;
-    let change_z = 0;
-    if(hasZ) {
-        // @ts-ignore
-        change_z = current.z - target.z;
-    }
+    let change_z = current_z - target_z;
     const originalTo = {
         x: target.x,
         y: target.y,
-        // @ts-ignore
-        z: target.z,
+        z: target_z,
     };
     const maxChange = maxSpeed * smoothTime;
     const maxChangeSq = maxChange * maxChange;
@@ -44,12 +44,12 @@ export function smoothDampVec<T extends IVector3 | IVector2>(
         change_y = change_y / mag * maxChange;
         change_z = change_z / mag * maxChange;
     }
-    target.x = current.x - change_x;
-    target.y = current.y - change_y;
-    if(hasZ) {
-        // @ts-ignore
-        target.z = current.z - change_z;
-    }
+    // Work on a copy: the speed-clamped target must not be written back to the caller's object
+    const clampedTarget = {
+        x: current.x - change_x,
+        y: current.y - change_y,
+        z: current_z - change_z,
+    };
 
     const temp_x = (currentVelocity.x + omega * change_x) * deltaTime;
     const temp_y = (currentVelocity.y + omega * change_y) * deltaTime;
@@ -66,20 +66,15 @@ export function smoothDampVec<T extends IVector3 | IVector2>(
         currentVelocity.z = (currentVelocity.z - omega * temp_z) * exp;
     }
 
-    output_x = target.x + (change_x + temp_x) * exp;
-    output_y = target.y + (change_y + temp_y) * exp;
+    output_x = clampedTarget.x + (change_x + temp_x) * exp;
+    output_y = clampedTarget.y + (change_y + temp_y) * exp;
     if(hasZ) {
-        // @ts-ignore
-        output_z = target.z + (change_z + temp_z) * exp;
+        output_z = clampedTarget.z + (change_z + temp_z) * exp;
     }
 
     const origMinusCurrent_x = originalTo.x - current.x;
     const origMinusCurrent_y = originalTo.y - current.y;
-    let origMinusCurrent_z = 0;
-    if(hasZ) {
-        // @ts-ignore
-        origMinusCurrent_z = originalTo.z - current.z;
-    }
+    const origMinusCurrent_z = originalTo.z - current_z;
     const outMinusOrig_x = output_x - originalTo.x;
     const outMinusOrig_y = output_y - originalTo.y;
     const outMinusOrig_z = output_z - originalTo.z;

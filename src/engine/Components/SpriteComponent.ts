@@ -3,7 +3,6 @@ import {
   Sprite as PIXISprite,
   Texture as PIXITexture,
   Filter as PIXIFilter,
-  Filter,
   Point,
   BLEND_MODES,
 } from "pixi.js";
@@ -75,8 +74,8 @@ export class SpriteComponent extends Component {
   }
 
   public addFilter(filter: PIXIFilter): void {
-    if (!this._sprite.filters) this._sprite.filters = [];
-    (this._sprite.filters as Filter[]).push(filter);
+    // PIXI v8 returns a frozen filters array, so assign a new one rather than pushing
+    this._sprite.filters = [...(this._sprite.filters ?? []), filter];
   }
 
   public getSpriteObj(): PIXISprite | null {
@@ -84,11 +83,23 @@ export class SpriteComponent extends Component {
   }
 
   public setTexture(_textureKey: string): void {
+    const texture = SpriteComponent.getTextureByKey(_textureKey);
     if (this._sprite) {
-      this._sprite.texture = ENGINE.getPIXIResource(_textureKey) as PIXITexture;
+      this._sprite.texture = texture;
     } else {
-      this.init(ENGINE.getPIXIResource(_textureKey) as PIXITexture);
+      this.init(texture);
     }
+  }
+
+  /**
+   * Unknown keys (and keys for non-texture assets, e.g. a spritesheet) give
+   * `Texture.EMPTY`, rather than handing the sprite something that isn't a texture.
+   */
+  private static getTextureByKey(_textureKey: string): PIXITexture {
+    const texture: unknown = ENGINE.getTexture(_textureKey);
+    if (texture instanceof PIXITexture) return texture;
+    console.warn("Asset %s is not a texture", _textureKey);
+    return PIXITexture.EMPTY;
   }
 
   private init(_texture?: PIXITexture): void {

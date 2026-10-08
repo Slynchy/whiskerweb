@@ -12,6 +12,9 @@ export enum AUDIO_TYPES {
 
 let __INSTANCE: AudioSingletonClass;
 
+// Instance volume used when playSound() isn't given `options.volume`, on first and later plays alike
+const DEFAULT_SOUND_VOLUME = 1;
+
 class AudioSingletonClass {
   private _audioInstances: {
     [AUDIO_TYPES.SFX]: {
@@ -62,20 +65,41 @@ class AudioSingletonClass {
     sound.stop(_id);
   }
 
+  private _removeFromCurrentlyPlaying(_id: string): void {
+    const index = this._currentlyPlaying.indexOf(_id);
+    if (index !== -1) this._currentlyPlaying.splice(index, 1);
+  }
+
   /**
-   * Plays a sound but don't care if it doesn't play; catches errors
+   * Plays a sound but don't care if it doesn't play; catches errors.
+   * Only one instance of each id plays at a time: while it's playing, further calls return "".
    * @param id
-   * @param options = {audioType: AUDIO_TYPES,}
+   * @param options = {audioType: AUDIO_TYPES, volume: number (default 1), loop: boolean, ...PIXI sound options}
+   * @returns The instance id (for getAudioInstance), or "" if the sound didn't play
    */
   public async playSound(
     id: string,
     options?: { [key: string]: any },
   ): Promise<string> {
     const audioType: AUDIO_TYPES = options?.audioType || AUDIO_TYPES.SFX;
+    const volume: number = options?.volume ?? DEFAULT_SOUND_VOLUME;
+    // audioType is ours, and volume is applied to the instance rather than the shared PIXI Sound
+    const { audioType: _audioType, volume: _volume, ...pixiOptions } = options || {};
+    const randId = uid();
 
     if (ENGINE_DEBUG_MODE) {
       console.log(`Trying to play ${id}`);
     }
+
+    // Forgets this instance and lets the id be played again; only acts once per instance
+    let released = false;
+    const release = () => {
+      if (released) return;
+      released = true;
+      if (this._audioInstances[audioType][id])
+        delete this._audioInstances[audioType][id][randId];
+      this._removeFromCurrentlyPlaying(id);
+    };
 
     const onEnd = (_stopped: boolean) => {
       if (ENGINE_DEBUG_MODE) {
@@ -83,14 +107,20 @@ class AudioSingletonClass {
           `Audio file ${id} ${_stopped ? "was stopped" : "finished playing"}`,
         );
       }
+      // Release first, otherwise the restart below is rejected as already playing
+      release();
       if (!_stopped && options?.loop) {
         this.playSound(id, options);
-        return;
-      } else {
-        if (this._audioInstances[audioType][id][randId])
-          delete this._audioInstances[audioType][id][randId];
-        this._currentlyPlaying.splice(this._currentlyPlaying.indexOf(id));
       }
+    };
+
+    const track = (_mediaInstance: IMediaInstance) => {
+      _mediaInstance.on("end", () => onEnd(false));
+      _mediaInstance.on("stop", () => onEnd(true));
+      // stopAllSounds() may have cleared the buckets meanwhile
+      if (!this._audioInstances[audioType][id])
+        this._audioInstances[audioType][id] = {};
+      this._audioInstances[audioType][id][randId] = _mediaInstance;
     };
 
     if (!this._audioInstances[audioType][id])
@@ -102,53 +132,60 @@ class AudioSingletonClass {
     this._currentlyPlaying.push(id);
 
     let mediaInstance: Promise<IMediaInstance> | IMediaInstance;
-    const randId = uid();
-    if (!this._audioInstances[AUDIO_TYPES.SFX][id]) {
-      this._audioInstances[AUDIO_TYPES.SFX][id] = {};
-    }
     try {
       if (!this.isLoaded(id)) {
         if (ENGINE_DEBUG_MODE) {
           console.log(`Not loaded ${id}, loading...`);
         }
         sound.add(id, {
+          ...pixiOptions,
           url: `assets/audio/${id}${getSupportedAudioFormat()}`,
           autoPlay: true,
           loaded: (_err, _sound, _mediaInstance) => {
             if (_err || !_mediaInstance) {
               console.error(_err || "No media instance!");
+              // Drop a sound that failed to load, so the next playSound() retries the load
+              // (a failed sound left in the library would return a promise that never resolves)
+              try {
+                if (_err && sound.exists(id)) sound.remove(id);
+              } catch (removeErr) {
+                console.warn(removeErr);
+              }
+              release();
             } else {
               if (ENGINE_DEBUG_MODE) {
                 console.log(`Loaded ${id} audio file`);
               }
               mediaInstance = _mediaInstance;
-              mediaInstance.volume = options?.volume || 0.1;
-              mediaInstance.on("end", () => onEnd(false));
-              mediaInstance.on("stop", () => onEnd(true));
+              _mediaInstance.volume = volume;
+              track(_mediaInstance);
             }
           },
-          ...(options || {}),
         });
       } else {
-        mediaInstance = sound.play(id, options || {});
+        mediaInstance = sound.play(id, { ...pixiOptions, volume });
         if (HelperFunctions.isPromise(mediaInstance)) {
-          (mediaInstance as Promise<IMediaInstance>).then((_mediaInstance) => {
-            mediaInstance = _mediaInstance;
-            mediaInstance.on("end", () => onEnd(false));
-            mediaInstance.on("stop", () => onEnd(true));
-            this._audioInstances[AUDIO_TYPES.SFX][id][randId] = mediaInstance;
-          });
+          (mediaInstance as Promise<IMediaInstance>)
+            .then((_mediaInstance) => {
+              mediaInstance = _mediaInstance;
+              track(_mediaInstance);
+            })
+            .catch((err) => {
+              console.warn(err);
+              release();
+            });
         } else if (mediaInstance) {
-          (mediaInstance as IMediaInstance).on("end", () => onEnd(false));
-          (mediaInstance as IMediaInstance).on("stop", () => onEnd(true));
-          this._audioInstances[AUDIO_TYPES.SFX][id][randId] = mediaInstance;
+          track(mediaInstance as IMediaInstance);
         } else {
           throw new Error("No media instance!");
         }
       }
     } catch (err) {
       console.warn(err);
-      if (!mediaInstance) return "";
+      if (!mediaInstance) {
+        release();
+        return "";
+      }
     }
 
     return randId;

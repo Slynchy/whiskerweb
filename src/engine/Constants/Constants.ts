@@ -1,11 +1,10 @@
 export const __WWPRODUCTION: boolean = true;
-export const __WWVERSION: string = "0.5.2";
 
 export const ENGINE_DEBUG_MODE: boolean = !__WWPRODUCTION;
 export const SCENE_DEBUG_MODE: boolean = false;
 export const MASK_DEBUG_MODE: boolean = false;
-export const LOADTIME_DEBUG_MODE: boolean = true;
-export const ANALYTICS_DEBUG_MODE = true;
+export const LOADTIME_DEBUG_MODE: boolean = ENGINE_DEBUG_MODE;
+export const ANALYTICS_DEBUG_MODE: boolean = ENGINE_DEBUG_MODE;
 export const AD_DEBUG = ENGINE_DEBUG_MODE;
 export const PUPPETEER_MODE: boolean = false;
 

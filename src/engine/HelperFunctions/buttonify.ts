@@ -8,6 +8,45 @@ interface IButtonifyState {
     pointerDown: boolean;
 }
 
+type ButtonifyEventName = "pointerup" | "pointerdown" | "pointerover" | "pointerout" | "pointerupoutside" | "pointermove";
+type ButtonifyListener = (ev: PIXIInteractionEvent) => void;
+
+// The unbind function of each target's current binding, so a second buttonify() call can replace it
+const _bindings: WeakMap<Container, () => void> = new WeakMap();
+
+/**
+ * Makes each target interactive and adds the listeners, replacing any earlier buttonify() binding on it.
+ * @returns A function that removes this call's listeners from every target that still has this binding
+ */
+function bindTargets<T extends Container>(
+    _targets: T[],
+    _listeners: Array<[ButtonifyEventName, ButtonifyListener]>,
+    _disableButtonMode?: boolean
+): () => void {
+    const unbinds: Array<() => void> = [];
+    for (let i = 0; i < _targets.length; i++) {
+        const target = _targets[i];
+        const previousUnbind = _bindings.get(target);
+        if (previousUnbind) previousUnbind();
+
+        const cursorBeforeBinding = target.cursor;
+        HelperFunctions.makeInteractive(target, _disableButtonMode);
+        _listeners.forEach(([event, listener]) => target.on(event, listener));
+
+        const unbind = (): void => {
+            // Do nothing if this binding was already removed or replaced by a later buttonify() call
+            if (_bindings.get(target) !== unbind) return;
+            _bindings.delete(target);
+            _listeners.forEach(([event, listener]) => target.off(event, listener));
+            target.cursor = cursorBeforeBinding;
+        };
+        _bindings.set(target, unbind);
+        unbinds.push(unbind);
+    }
+
+    return () => unbinds.forEach((unbind) => unbind());
+}
+
 function buttonify_mobile<T extends Container>(
     _target: T | T[],
     _settings: {
@@ -22,7 +61,7 @@ function buttonify_mobile<T extends Container>(
         onPointerOut?: (ev: PIXIInteractionEvent, _state: IButtonifyState) => void;
         onPointerMove?: (ev: PIXIInteractionEvent, _state: IButtonifyState) => void;
     }
-): void {
+): () => void {
     const state: IButtonifyState = {
         pointerOver: false,
         pointerDown: false,
@@ -54,21 +93,19 @@ function buttonify_mobile<T extends Container>(
         state.pointerDown = true;
     };
 
-    const targets = Array.isArray(_target) ? _target : [_target];
-    for( let i = 0; i < targets.length; i++) {
-        const target = targets[i];
-        HelperFunctions.makeInteractive(target, _settings.disableButtonMode);
-        target.on("pointerup", pointerUp);
-        target.on("pointerdown", pointerDown);
-        if(_settings.trackMovementOutsideElement) {
-            target.on("pointerupoutside", pointerUp);
-        }
-        if(pointerMove) {
-            target.on("pointermove", pointerMove);
-        }
+    const listeners: Array<[ButtonifyEventName, ButtonifyListener]> = [
+        ["pointerup", pointerUp],
+        ["pointerdown", pointerDown],
+    ];
+    if(_settings.trackMovementOutsideElement) {
+        listeners.push(["pointerupoutside", pointerUp]);
+    }
+    if(pointerMove) {
+        listeners.push(["pointermove", pointerMove]);
     }
 
-    return;
+    const targets = Array.isArray(_target) ? _target : [_target];
+    return bindTargets(targets, listeners, _settings.disableButtonMode);
 }
 
 function buttonify_desktop<T extends Container>(
@@ -85,7 +122,7 @@ function buttonify_desktop<T extends Container>(
         onPointerOut?: (ev: PIXIInteractionEvent, _state: IButtonifyState) => void;
         onPointerMove?: (ev: PIXIInteractionEvent, _state: IButtonifyState) => void;
     }
-): void {
+): () => void {
     const state: IButtonifyState = {
         pointerOver: false,
         pointerDown: false,
@@ -125,25 +162,29 @@ function buttonify_desktop<T extends Container>(
         state.pointerDown = true;
     };
 
-    const targets = Array.isArray(_target) ? _target : [_target];
-    for( let i = 0; i < targets.length; i++) {
-        const target = targets[i];
-        HelperFunctions.makeInteractive(target, _settings.disableButtonMode);
-        target.on("pointerup", pointerUp);
-        target.on("pointerover", pointerOver);
-        target.on("pointerout", pointerOut);
-        target.on("pointerdown", pointerDown);
-        if(_settings.trackMovementOutsideElement) {
-            target.on("pointerupoutside", pointerUp);
-        }
-        if(pointerMove) {
-            target.on("pointermove", pointerMove);
-        }
+    const listeners: Array<[ButtonifyEventName, ButtonifyListener]> = [
+        ["pointerup", pointerUp],
+        ["pointerover", pointerOver],
+        ["pointerout", pointerOut],
+        ["pointerdown", pointerDown],
+    ];
+    if(_settings.trackMovementOutsideElement) {
+        listeners.push(["pointerupoutside", pointerUp]);
+    }
+    if(pointerMove) {
+        listeners.push(["pointermove", pointerMove]);
     }
 
-    return;
+    const targets = Array.isArray(_target) ? _target : [_target];
+    return bindTargets(targets, listeners, _settings.disableButtonMode);
 }
 
+/**
+ * Makes the target(s) clickable/tappable; `onFire` runs on a completed click or tap.
+ * Calling it again on the same target replaces that target's previous binding rather than adding to it.
+ * @returns A function that removes the listeners added by this call (and restores the cursor).
+ *  It does nothing for targets that have since been re-buttonified, and is safe to call more than once.
+ */
 export function buttonify<T extends Container>(
     _target: T | T[],
     _settings: {
@@ -158,12 +199,10 @@ export function buttonify<T extends Container>(
         onPointerOut?: (ev: PIXIInteractionEvent, _state: IButtonifyState) => void;
         onPointerMove?: (ev: PIXIInteractionEvent, _state: IButtonifyState) => void;
     }
-): void {
+): () => void {
     if((!isMobile() && !isTouchDevice())) {
-        buttonify_desktop(_target, _settings);
+        return buttonify_desktop(_target, _settings);
     } else {
-        buttonify_mobile(_target, _settings);
+        return buttonify_mobile(_target, _settings);
     }
-
-    return;
 }

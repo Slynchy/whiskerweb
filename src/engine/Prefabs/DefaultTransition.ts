@@ -5,10 +5,12 @@ export class DefaultTransition extends State {
     onAwake(_engine: Engine, _params?: unknown): void {
     }
 
-    onDestroy(engine: Engine): void {
+    onDestroy(_engine: Engine): void {
+        super.onDestroy(_engine);
     }
 
     onStep(_engine: Engine): void {
+        super.onStep(_engine);
     }
 
     preload(_engine: Engine): Promise<void> {

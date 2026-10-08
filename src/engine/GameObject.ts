@@ -1,7 +1,7 @@
 import { Component } from "./Component";
 import { InteractionEvent } from "./Types/InteractionEvent";
 import { HelperFunctions } from "./HelperFunctions";
-import { Container, Renderer } from "pixi.js";
+import { Container, DestroyOptions } from "pixi.js";
 import { IVector2 } from "./Types/IVector2";
 
 // tslint:disable-next-line:no-any
@@ -31,43 +31,59 @@ export class GameObject extends Container {
         }
     }
 
+    /**
+     * Gets, or with `_val` sets, whether this object's components are stepped.
+     * Changing it calls each component's `System.onEnable` / `System.onDisable`.
+     * @param _val
+     * @param _recursive Also apply to child GameObjects
+     */
     public isActive(_val?: boolean, _recursive?: boolean): boolean {
         if(typeof _val === "boolean") {
-            if(LOG_ACTIVITY_CHANGE) {
-                if(_val !== this._active) {
-                    console.log(`Setting %s to ${_val ? "active" : "inactive"}`, this.name);
+            if(_val !== this._active) {
+                if(LOG_ACTIVITY_CHANGE) {
+                    console.log(`Setting %s to ${_val ? "active" : "inactive"}`, this.label);
+                }
+                this._active = _val;
+                for (const comp of [...this.components]) {
+                    if (_val) {
+                        comp.getSystem().onEnable(comp);
+                    } else {
+                        comp.getSystem().onDisable(comp);
+                    }
                 }
             }
             if(_recursive) {
-                this.children.forEach((e: GameObject) => e.isActive ? e.isActive(_val, _recursive) : null);
+                this.children.forEach((e) => (e as GameObject).isActive?.(_val, _recursive));
             }
-            return this._active = _val;
-        } else {
-            return this._active;
         }
+        return this._active;
     }
 
     public getComponents(): Component[] {
         return [...this.components];
     }
 
-    public translate(x: number | IVector2, y: number): void {
-        if (typeof x === "number") {
-            this.x = (this.x + x * Math.cos(this.rotation));
-            this.y = (this.y + y * Math.sin(this.rotation));
-        } else {
-            this.x = (this.x + x.x * Math.cos(this.rotation));
-            this.y = (this.y + x.y * Math.sin(this.rotation));
-        }
+    /**
+     * Moves the object along its own (rotated) axes
+     */
+    public translate(x: number | IVector2, y: number = 0): void {
+        const dx = typeof x === "number" ? x : x.x;
+        const dy = typeof x === "number" ? y : x.y;
+        const cos = Math.cos(this.rotation);
+        const sin = Math.sin(this.rotation);
+        this.x += dx * cos - dy * sin;
+        this.y += dx * sin + dy * cos;
     }
 
     public addComponent(_component: Component): void {
         if (this.hasComponent(_component)) {
             throw new Error("Cannot have multiple of the same component on a single GameObject!");
         }
+        const system = _component.getSystem();
         this.components.push(_component);
-        this.components[this.components.length - 1].parent = (this);
-        _component.getSystem().onAwake(_component);
+        Component.instances.push(_component);
+        _component.parent = this;
+        system.onAwake(_component);
         _component.onAttach();
         for (let i = 0; i < this.components.length - 1; i++) {
             this.components[i].onComponentAttached(
@@ -78,26 +94,29 @@ export class GameObject extends Container {
         this.fireEvent("_onAddComponent", _component);
     }
 
+    /**
+     * Removes a component (by instance or by class), calling its `onDetach` and then its `System.onDestroy`
+     */
     public removeComponent<T extends BasicClass>(_component: T | Component): void {
-        if (!(_component instanceof Component) && !this.hasComponent(_component)) {
+        const index = this.components.findIndex(
+            (c) => c === _component || c.constructor === _component
+        );
+        if (index === -1) {
+            if (_component instanceof Component) return;
             throw new Error("Could not remove component from GameObject; doesn't exist!");
         }
 
-        for (const c in this.components) {
-            if (this.components[c] === _component || this.components[c].constructor === _component) {
-                this.components[c].onDetach();
-                this.fireEvent(
-                    "_onRemoveComponent",
-                    this.components.splice(Number(c), 1)[0]
-                );
-                return;
-            }
-        }
+        const comp = this.components.splice(index, 1)[0];
+        const instanceIndex = Component.instances.indexOf(comp);
+        if (instanceIndex !== -1) Component.instances.splice(instanceIndex, 1);
+        comp.onDetach();
+        comp.getSystem().destroy(comp);
+        this.fireEvent("_onRemoveComponent", comp);
     }
 
     public removeAllComponents(): void {
-        for (const c in this.components) {
-            this.removeComponent(this.components[c]);
+        for (const comp of [...this.components]) {
+            this.removeComponent(comp);
         }
     }
 
@@ -118,15 +137,10 @@ export class GameObject extends Container {
     }
 
     public hasComponent<T extends BasicClass>(_component: T | Component): boolean {
-        if(_component instanceof Component) {
-            return Boolean(this.components.find((e) => {
-                return (e.constructor as typeof Component).id === (_component as unknown as typeof Component).id;
-            }));
-        } else {
-            return Boolean(this.components.find((e) => {
-                return (e.constructor as typeof Component).id === (_component as unknown as typeof Component).id;
-            }));
-        }
+        const id = _component instanceof Component
+            ? (_component.constructor as typeof Component).id
+            : (_component as unknown as typeof Component).id;
+        return this.components.some((e) => (e.constructor as typeof Component).id === id);
     }
 
     public debug_GetListOfComponents(): string {
@@ -144,32 +158,41 @@ export class GameObject extends Container {
         return null;
     }
 
-    public destroy(options?: any): void {
+    /**
+     * Removes every component (see `removeComponent`), then destroys all children and the object itself.
+     * Children are always destroyed, whatever `options.children` says.
+     */
+    public destroy(options?: DestroyOptions): void {
+        if (this.destroyed) return;
         this._queuedForDestruction = true;
-        for (const onDestroyId in this._onDestroy) {
+        const onDestroy = this._onDestroy;
+        this._onDestroy = {};
+        for (const onDestroyId in onDestroy) {
             if (
-                Object.prototype.hasOwnProperty.call(this._onDestroy, onDestroyId)
+                Object.prototype.hasOwnProperty.call(onDestroy, onDestroyId) &&
+                onDestroy[onDestroyId]
             ) {
-                this._onDestroy[onDestroyId]();
+                onDestroy[onDestroyId]();
             }
         }
-        this._onDestroy = null;
-        for (const comp of this.components) {
-            comp.getSystem().destroy(comp);
-        }
         this.removeAllComponents();
-        this.components.length = 0;
-        this.children.forEach((e) => {
-            if (e.destroy)
-                e.destroy(options);
-        });
+        // `true` also destroys textures, so only pass it on if the caller asked for it
+        const childOptions: DestroyOptions =
+            typeof options === "object" ? { ...options, children: true } : options === true ? true : { children: true };
+        for (const child of [...this.children]) {
+            child.destroy(childOptions);
+        }
         super.destroy(options);
     }
 
     public onStep(_dt: number): void {
         if(!this.isActive()) return;
-        for (const component of this.components) {
+        const components = this.components;
+        for (let i = 0; i < components.length; i++) {
+            const component = components[i];
             component.getSystem().onStep(_dt, component);
+            // The component removed itself, so the next one is now at index i
+            if (components[i] !== component) i--;
         }
     }
 
@@ -180,7 +203,7 @@ export class GameObject extends Container {
             // @ts-ignore
             if( this[key][ev] ) {
                 // @ts-ignore
-                this[key][ev](params);
+                this[key][ev](...params);
             }
         }
     }

@@ -4,7 +4,6 @@ import {Component} from "../Component";
 import {GameObject} from "../GameObject";
 import {System} from "../Systems/System";
 import {ENGINE_DEBUG_MODE} from "../Constants/Constants";
-import {AnimationSystem} from "../Systems/AnimationSystem";
 import {Graphics} from "pixi.js";
 
 class TestSystem extends System {

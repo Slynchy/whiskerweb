@@ -1,7 +1,5 @@
 
 import { Component } from "../Component";
-import { System } from "../Systems/System";
-import { Bounds, Rectangle } from "pixi.js";
 import { ScaleElementOnClickSystem } from "../Systems/ScaleElementOnClickSystem";
 import { IVector2 } from "../Types/IVector2";
 import { ITweenAnimationReturnValue } from "../HelperFunctions";
@@ -14,6 +12,10 @@ export class ScaleElementOnClickComponent extends Component {
     private startPos: IVector2 = null;
     private startSize: IVector2 = null;
     private scaleAnim: ITweenAnimationReturnValue;
+
+    // pointer listeners registered on the parent, kept so they can be removed again
+    private onPointerDownHandler: () => void = null;
+    private onPointerUpHandler: () => void = null;
 
     public scaleFactor: number;
 

@@ -1,18 +1,17 @@
+import { formatDateAsDDMMYYYY, padTwoDigits } from "./timeFormatting";
+
+/**
+ * Formats a timestamp as local wall-clock time on the 24-hour clock, "HH:MM:SS"
+ * (or "DD/MM/YYYY HH:MM:SS" with `includeDate`).
+ * This is a point in time; to format a duration, use `HelperFunctions.formatTimeToHHMMSS`.
+ * @param timestamp Milliseconds since the epoch
+ * @param includeDate Optional: prefix the local date as "DD/MM/YYYY "
+ */
 export function formatTimestampToHHMMSS(
     timestamp: number,
     includeDate: boolean = false
 ): string {
     const date = new Date(timestamp);
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    const seconds = date.getSeconds().toString().padStart(2, '0');
-
-    if(includeDate) {
-        const day = date.getDate().toString().padStart(2, '0');
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const year = date.getFullYear().toString();
-        return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
-    } else {
-        return `${hours}:${minutes}:${seconds}`;
-    }
+    const time = `${padTwoDigits(date.getHours())}:${padTwoDigits(date.getMinutes())}:${padTwoDigits(date.getSeconds())}`;
+    return includeDate ? `${formatDateAsDDMMYYYY(date)} ${time}` : time;
 }

@@ -5,19 +5,22 @@ import {
     FederatedEvent as PIXIInteractionEvent,
     ObservablePoint,
     Sprite,
-    Sprite as PIXISprite,
     Container, Texture, Graphics
 } from "pixi.js";
 import { InteractionEvent } from "./Types/InteractionEvent";
-import { SpriteComponent } from "./Components/SpriteComponent";
 import { Engine } from "./Engine";
 import { DIRECTION } from "./Types/Direction";
 import { IVector2 } from "./Types/IVector2";
-import * as TWEEN from '@tweenjs/tween.js';
+import { Easing, Tween } from "@tweenjs/tween.js";
 import { AudioSingleton } from "./AudioSingleton";
 import { Vector2 } from "../lib/Vector2";
 import { ENGINE_DEBUG_MODE } from "./Constants/Constants";
-import { TWEENDirection, TWEENFunctions } from "./HelperFunctions/TWEENFunctions";
+import { getEasingFunction, TEasingFunction, TWEENDirection, TWEENFunctions } from "./HelperFunctions/TWEENFunctions";
+import { tweenGroup } from "./TweenGroup";
+import { getMainCanvasElement } from "./HelperFunctions/getMainCanvasElement";
+import { mathClamp } from "./HelperFunctions/mathClamp";
+import { uid } from "./HelperFunctions/uid";
+import { padTwoDigits } from "./HelperFunctions/timeFormatting";
 
 export interface TooltipProperties {
     x: number;
@@ -30,14 +33,30 @@ export interface TooltipProperties {
 }
 
 export interface ITweenAnimationReturnValue {
+    /**
+     * Stops the tween where it is (the target keeps its current value, it does *not* jump to the end)
+     * and resolves `promise`. Safe to call more than once, or after the tween has finished.
+     */
     cancel: () => void;
+    /** Elapsed fraction of the tween's duration, 0 to 1 */
     progress: number;
+    /** Resolves when the tween completes, is cancelled, or is stopped by its `_onTick` returning false */
     promise: Promise<void>;
 }
 
 // declare const window: Window & {
 //     ENGINE: Engine;
 // };
+
+/**
+ * The easing function for a tween helper's `_func` argument: either an easing function itself
+ * or a `{ function, direction }` pair naming one of tween.js' `Easing` groups.
+ */
+function resolveEasing(
+    _func: TEasingFunction | { function: TWEENFunctions; direction: TWEENDirection; }
+): TEasingFunction {
+    return typeof _func === "function" ? _func : getEasingFunction(_func.function, _func.direction);
+}
 
 export class HelperFunctions {
     constructor() {
@@ -76,11 +95,12 @@ export class HelperFunctions {
         closeButton.scale.set(0.6, 0.6);
 
         const closeXGraphic = new Graphics();
-        // closeXGraphic.lineStyle(3, 0x1a1a1a, 1);
         closeXGraphic.moveTo(0,0);
         closeXGraphic.lineTo(24, 24);
         closeXGraphic.moveTo(24,0);
         closeXGraphic.lineTo(0, 24);
+        // PIXI v8: paths are only drawn once stroked
+        closeXGraphic.stroke({ width: 3, color: 0x1a1a1a, alpha: 1 });
         closeXGraphic.scale.set(2, 2);
         closeXGraphic.position.set(-24, -24);
         closeButton.addChild(closeXGraphic);
@@ -93,7 +113,7 @@ export class HelperFunctions {
         _startingNode: GameObject,
         _hierarchyIndex: number = 0
     ): GameObject | null {
-        if (_targetHierarchy === _startingNode.name || _targetHierarchy == "")
+        if (_targetHierarchy === _startingNode.label || _targetHierarchy == "")
             return _startingNode;
 
         _hierarchyIndex++;
@@ -103,7 +123,7 @@ export class HelperFunctions {
 
         for (let i = 0; i < objChildren.length; i++) {
             const currElement = objChildren[i] as GameObject;
-            if (currElement.name === currentTargetHierarchy) {
+            if (currElement.label === currentTargetHierarchy) {
                 return HelperFunctions.findPropByHierarchy(
                     _targetHierarchy,
                     currElement,
@@ -163,29 +183,27 @@ export class HelperFunctions {
         }
     }
 
+    /**
+     * @deprecated Use `HelperFunctions.playSound` (identical)
+     */
     public static playSound_s(id: string, options?: { [key: string]: any }): Promise<string> {
-        return AudioSingleton.playSound(id, options);
+        return HelperFunctions.playSound(id, options);
     }
 
     public static playSound(id: string, options?: { [key: string]: any }): Promise<string> {
         return AudioSingleton.playSound(id, options);
     }
 
+    /**
+     * Returns the dominant direction of an offset in screen space (+y is down),
+     * matching `getDirectionOfSwipe`. Ties go to the vertical axis.
+     * @param _offset
+     */
     public static getDirectionFromOffset(_offset: IVector2): DIRECTION {
-        const axis = _offset.x > _offset.y ? "x" : "y";
-
-        if (axis === "x") {
-            if (_offset[axis] > 0) {
-                return DIRECTION.DOWN;
-            } else {
-                return DIRECTION.UP;
-            }
+        if (Math.abs(_offset.x) > Math.abs(_offset.y)) {
+            return _offset.x < 0 ? DIRECTION.LEFT : DIRECTION.RIGHT;
         } else {
-            if (_offset[axis] > 0) {
-                return DIRECTION.RIGHT;
-            } else {
-                return DIRECTION.LEFT;
-            }
+            return _offset.y < 0 ? DIRECTION.UP : DIRECTION.DOWN;
         }
     }
 
@@ -226,8 +244,12 @@ export class HelperFunctions {
         return Math.round(num * factor) / factor;
     }
 
+    /**
+     * Returns the engine's canvas (falling back to the element with id "ui-canvas"), or null if there is none yet.
+     * @deprecated Use `Helpers.getMainCanvasElement`
+     */
     public static getMainCanvasElement(): HTMLCanvasElement {
-        return document.getElementById("ui-canvas") as HTMLCanvasElement;
+        return getMainCanvasElement();
     }
 
     // public static NearestPointOnFiniteLine(start: Vector3, end: Vector3, pnt: Vector3): Vector3 {
@@ -241,18 +263,24 @@ export class HelperFunctions {
     //     return line.multiply(new Vector3(d, d, d)).add(start);
     // }
 
+    /**
+     * Limits `val` to [min, max]. If min > max, values below `min` give `min` and every other value gives `max`.
+     * @deprecated Use `Helpers.mathClamp`
+     */
     public static clamp(val: number, min: number, max: number): number {
-        return Math.min(Math.max(val, min), max);
+        return mathClamp(val, min, max);
     }
 
     public static makeInteractive(_obj: DisplayObject, _skipButtonMode?: boolean): void {
-        _obj.interactive = _obj.interactiveChildren = true;
+        _obj.eventMode = "static";
+        _obj.interactiveChildren = true;
         _obj.cursor = _skipButtonMode ? "default" : "pointer";
     }
 
     public static makeUninteractive(_obj: DisplayObject): void {
-        // @ts-ignore
-        _obj.interactive = _obj.interactiveChildren = false;
+        // "passive" is what the deprecated `interactive = false` maps to in PIXI v8
+        _obj.eventMode = "passive";
+        _obj.interactiveChildren = false;
     }
 
     public static parseInteractionEvent(ev: PIXIInteractionEvent, canvasWidth?: number, canvasHeight?: number): IVector2 {
@@ -273,26 +301,30 @@ export class HelperFunctions {
         };
     }
 
+    /**
+     * @deprecated Use `Helpers.getMainCanvasElement` (this is the same canvas)
+     */
     public static getUICanvas(): HTMLCanvasElement {
-        return document.getElementById("ui-canvas") as HTMLCanvasElement;
+        return getMainCanvasElement();
     }
 
     public static calculateScaleFactor(_screenSize: IVector2): number {
         let scaleFactor: number;
+        const canvas = getMainCanvasElement();
         const canvas3dWidth = _screenSize ? _screenSize.x : parseInt(
-            HelperFunctions.getMainCanvasElement().style.width
+            canvas.style.width
         );
         const canvas3dHeight = _screenSize ? _screenSize.y : parseInt(
-            HelperFunctions.getMainCanvasElement().style.height
+            canvas.style.height
         );
         switch (ENGINE["autoResize"]) {
             case "height":
-                scaleFactor = canvas3dHeight / HelperFunctions.getUICanvas().height;
+                scaleFactor = canvas3dHeight / canvas.height;
                 break;
             case "none":
             case "width":
             default:
-                scaleFactor = canvas3dWidth / HelperFunctions.getUICanvas().width;
+                scaleFactor = canvas3dWidth / canvas.width;
                 break;
         }
         return scaleFactor;
@@ -314,19 +346,16 @@ export class HelperFunctions {
         }
     }
 
+    /**
+     * Removes `obj` (any PIXI container, including a GameObject) from `stage`.
+     * Throws if `obj` isn't a container, unless `unsafe` is set.
+     */
     public static removeFromStage(stage: Container, obj: DisplayObject | GameObject, unsafe?: boolean): void {
-        if (unsafe || HelperFunctions.isDisplayObject(obj)) {
-            stage.removeChild(obj as DisplayObject);
-        } else if (HelperFunctions.isGameObject(obj)) {
-            if ((obj as GameObject).hasComponent(SpriteComponent)) {
-                const sprite: PIXISprite = ((obj as GameObject).getComponent(SpriteComponent) as SpriteComponent).getSpriteObj();
-                if (sprite) stage.removeChild(sprite);
-            } else {
-                throw new Error("GameObject must have Sprite or Container component to be added to scene!");
-            }
-        } else if (!unsafe) {
-            throw new Error("Invalid object attempted to add to scene");
+        // GameObject extends Container, so it passes the container check
+        if (!unsafe && !HelperFunctions.isDisplayObject(obj)) {
+            throw new Error("Invalid object attempted to remove from scene");
         }
+        stage.removeChild(obj);
     }
 
     public static addToStage(stage: Container, obj: GameObject | Container | DisplayObject): void {
@@ -334,40 +363,40 @@ export class HelperFunctions {
         stage.addChild(obj);
     }
 
+    /**
+     * Formats a *duration* in ms as HH:MM:SS, e.g. 3723000 -> "01:02:03".
+     * Hours don't wrap at 24 (e.g. 25 hours is "25:00:00").
+     * To format a point in time (a timestamp) as a clock time, use `Helpers.formatTimestampToHHMMSS`.
+     * @param _time Duration in milliseconds
+     */
     public static formatTimeToHHMMSS(_time: number): string {
-        const hours = Math.floor((_time / 1000 / 3600) % 24);
-        return `${hours}:${HelperFunctions.formatTimeToMMSS(_time)}`;
+        const hours = Math.floor(_time / 1000 / 3600);
+        return `${padTwoDigits(hours)}:${HelperFunctions.formatTimeToMMSS(_time)}`;
     }
 
     /**
+     * Formats a *duration* in ms as MM:SS, e.g. 63000 -> "01:03". Minutes wrap at 60 (hours are dropped);
+     * use `formatTimeToHHMMSS` for longer durations.
+     * To format a point in time (a timestamp) as a clock time, use `Helpers.formatTimestampToHHMM`.
      * Modified from https://stackoverflow.com/questions/29816872/how-can-i-convert-milliseconds-to-hhmmss-format-using-javascript
-     * @param _time
+     * @param _time Duration in milliseconds
      */
     public static formatTimeToMMSS(_time: number): string {
-        // 1- Convert to seconds:
         const seconds = Math.floor((_time / 1000) % 60);
         const minutes = Math.floor((_time / 1000 / 60) % 60);
-
-        return `${
-            minutes < 10 ? "0" + minutes : minutes
-        }:${
-            seconds < 10 ? "0" + seconds : seconds
-        }`;
+        return `${padTwoDigits(minutes)}:${padTwoDigits(seconds)}`;
     }
 
+    /**
+     * Adds `obj` (any PIXI container, including a GameObject) to `stage`.
+     * Throws if `obj` isn't a container, unless `unsafe` is set.
+     */
     public static addToStage2D(stage: Container, obj: DisplayObject | GameObject, unsafe?: boolean): void {
-        if (unsafe || HelperFunctions.isDisplayObject(obj)) {
-            stage.addChild(obj as DisplayObject);
-        } else if (HelperFunctions.isGameObject(obj)) {
-            if ((obj as GameObject).hasComponent(SpriteComponent)) {
-                const sprite: PIXISprite = ((obj as GameObject).getComponent(SpriteComponent) as SpriteComponent).getSpriteObj();
-                if (sprite) stage.addChild(sprite);
-            } else {
-                throw new Error("GameObject must have Sprite or Container component to be added to scene!");
-            }
-        } else if (!unsafe) {
+        // GameObject extends Container, so it passes the container check
+        if (!unsafe && !HelperFunctions.isDisplayObject(obj)) {
             throw new Error("Invalid object attempted to add to scene");
         }
+        stage.addChild(obj);
     }
 
     public static async shakeObject(_target: Vector2, _iterations?: number): Promise<void> {
@@ -478,10 +507,15 @@ export class HelperFunctions {
         return;
     }
 
+    /**
+     * Tweens `_target.x` and `_target.y` together. See `TWEENAsPromise` for the return value.
+     * @param _onTick Optional: called once per frame, after x has been updated and before y is;
+     *  return false to stop both axes where they are (this resolves the promise).
+     */
     public static TWEENVec2AsPromise(
         _target: Vector2 | ObservablePoint | IVector2,
         _destVal: Vector2 | ObservablePoint | IVector2,
-        _func: typeof TWEEN.Easing.Linear.None | {
+        _func: TEasingFunction | {
             function: TWEENFunctions;
             direction: TWEENDirection;
         },
@@ -493,25 +527,26 @@ export class HelperFunctions {
             cancel: null,
             progress: 0
         };
-        let counter = 0;
-        const onTick = !_onTick ? () => true : (obj?: any, elapsed?: number): boolean => {
-            counter++;
-            if (counter >= 2) {
-                counter = 0;
-                return _onTick(obj, elapsed);
-            } else {
-                return true;
-            }
-        };
 
+        // Both axes are in the engine's tween group on the same clock, so x and y tick in the same
+        // frame (x first: the group updates tweens in creation order). _onTick runs once per frame,
+        // on y's tick; if it returns false, y stops itself and x is cancelled here, so neither axis
+        // carries on to the end value.
+        const easing = resolveEasing(_func);
         const xPromise = HelperFunctions.TWEENAsPromise(
-            _target, "x", _destVal.x, _func, _duration, (e, d) => {
+            _target, "x", _destVal.x, easing, _duration, (e, d) => {
                 retVal.progress = d;
-                return onTick(e, d);
+                return true;
             }
         );
         const yPromise = HelperFunctions.TWEENAsPromise(
-            _target, "y", _destVal.y, _func, _duration, onTick
+            _target, "y", _destVal.y, easing, _duration, !_onTick ? undefined : (e, d) => {
+                const cont: boolean = _onTick(e, d);
+                if (!cont) {
+                    xPromise.cancel();
+                }
+                return cont;
+            }
         );
 
         retVal.promise = Promise.all([
@@ -529,7 +564,7 @@ export class HelperFunctions {
     // public static TWEENVec3AsPromise(
     //     _target: Vector3 | Euler | IVector3,
     //     _destVal: Vector3 | Euler | IVector3,
-    //     _func: typeof TWEEN.Easing.Linear.None,
+    //     _func: TEasingFunction,
     //     _duration: number = 1000,
     //     _onTick?: (obj?: any, elapsed?: number) => boolean
     // ): ITweenAnimationReturnValue {
@@ -580,20 +615,26 @@ export class HelperFunctions {
      * NOTE: There is no protection against calling `await` on this function
      * So if you wonder why your animation finishes instantly, it's because you
      * need to `await TWEENAsPromise(...).promise`.
+     *
+     * `.promise` resolves when the tween completes (the target is set to `_destVal`), when
+     * `.cancel()` is called, or when `_onTick` returns false. Cancelling or stopping leaves the
+     * target at its current value rather than jumping to `_destVal`.
+     * The tween runs in the engine's tween group (`tweenGroup`), so it only advances while the engine
+     * ticker is running and is paused by `engine.pause()`; it leaves the group once it finishes or stops.
      * @param _target
      * @param _key
      * @param _destVal
-     * @param _func
-     * @param _duration
-     * @param _onTick
-     * @param _postTick
+     * @param _func An easing function (e.g. `Easing.Quadratic.Out`) or a `{ function, direction }` pair
+     * @param _duration In ms
+     * @param _onTick Optional: called every update before the value is applied; return false to stop the tween
+     * @param _postTick Optional: called every update after the value is applied
      * @constructor
      */
     public static TWEENAsPromise(
         _target: any,
         _key: string,
         _destVal: number,
-        _func: typeof TWEEN.Easing.Linear.None | {
+        _func: TEasingFunction | {
             function: TWEENFunctions;
             direction: TWEENDirection;
         },
@@ -606,54 +647,71 @@ export class HelperFunctions {
             cancel: null,
             progress: 0
         };
-        const start = {};
-        const dest = {};
-        let tween: TWEEN.Tween<{}>;
-        // @ts-ignore
-        start[_key] = _target[_key];
-        // @ts-ignore
-        dest[_key] = _destVal;
+        const start: Record<string, number> = { [_key]: _target[_key] };
+        const dest: Record<string, number> = { [_key]: _destVal };
 
-        tween = new TWEEN.Tween(start)
+        let resolvePromise: () => void;
+        const promise = new Promise<void>((resolve) => {
+            resolvePromise = resolve;
+        });
+        // Set once the promise has resolved, by completing, stopping or cancelling
+        let settled = false;
+        const settle = (): void => {
+            if (settled) return;
+            settled = true;
+            resolvePromise();
+        };
+
+        const tween: Tween<Record<string, number>> = new Tween(start)
             .to(dest, _duration)
+            .easing(resolveEasing(_func))
             .onUpdate((e, t) => {
                 retVal.progress = t;
                 const cont: boolean = _onTick ? _onTick(e, t) as boolean : true;
                 if (cont) {
-                    // @ts-ignore
                     _target[_key] = start[_key];
                     if(_postTick) {
                         _postTick(e, t);
                     }
                 } else {
+                    // Fires onStop, which resolves the promise
                     tween.stop();
                 }
             })
-            .easing(
-                typeof _func == "function" ?
-                    // @ts-ignore
-                    _func : TWEEN.Easing[_func.function][_func.direction]
-            );
-
-        let resolveEscape: Function;
-        const promise = new Promise<void>((resolve) => {
-            resolveEscape = resolve;
-            tween.onComplete(() => {
+            .onStop(() => {
+                tweenGroup.remove(tween);
+                settle();
+            })
+            .onComplete(() => {
+                tweenGroup.remove(tween);
+                // tween.js still calls onComplete if _onTick stopped it on the final update
+                if (settled) return;
                 _target[_key] = _destVal;
-                resolve();
-            }).start(Date.now());
-        });
+                settle();
+            });
+        // tween.js doesn't add new tweens to any group; the engine updates (and pauses) tweenGroup
+        tweenGroup.add(tween);
+        // No time argument: uses tween.js' default clock (performance.now), which the engine updates tweenGroup with
+        tween.start();
 
         retVal.cancel = () => {
+            // stop() only fires onStop while the tween is playing (or paused), so settle here too
             tween.stop();
-            tween.end();
-            resolveEscape();
+            tweenGroup.remove(tween);
+            settle();
         };
         retVal.promise = promise;
 
         return retVal;
     }
 
+    /**
+     * Polls the loader for a PIXI resource until it exists.
+     * @param _key Resource key
+     * @param _refreshRate How often to check, in ms
+     * @param _maxAttempts How many checks before giving up (0 = forever)
+     * @returns The resource, or undefined if it never appeared
+     */
     public static async tryGetPIXIResource<T>(
         _key: string,
         _refreshRate: number = 333,
@@ -662,21 +720,32 @@ export class HelperFunctions {
         let resource: T | undefined;
         try {
             await HelperFunctions.waitForTruth(() => {
-                return Boolean(resource = ENGINE.getPIXIResource("gameLogo") as unknown as T);
-            }, _refreshRate);
+                // hasPIXIResource first, so polling doesn't log a "missing texture" warning every attempt
+                return ENGINE.hasPIXIResource(_key) &&
+                    Boolean(resource = ENGINE.getPIXIResource(_key) as unknown as T);
+            }, _refreshRate, _maxAttempts);
         } catch (err) {
-            console.error(err);
+            console.error(`Gave up waiting for PIXI resource "${_key}" after ${_maxAttempts} attempts`);
         }
         return resource;
     }
 
+    /**
+     * @deprecated Use tween.js' `Easing.Back.In` (the same curve)
+     */
     public static easeInBack(x: number): number {
-        const c1 = 1.70158;
-        const c3 = c1 + 1;
-
-        return c3 * x * x * x - c1 * x * x;
+        return Easing.Back.In(x);
     }
 
+    /**
+     * Tweens `_target[_key]` to `_destValue`, then sets it to exactly `_destValue` and resolves.
+     * Runs on the engine's tween group via `TWEENAsPromise` (so it follows the ticker and `engine.pause()`).
+     * @param _tweenFunc Optional: interpolation `(from, to, t) => value`, called with t going linearly
+     *  from 0 to 1; defaults to `HelperFunctions.lerp`
+     * @param _speed Optional: fraction of the tween done per 60 fps frame (default 0.01, i.e. 100 frames,
+     *  about 1.67 s); the duration is `1000 / (60 * _speed)` ms
+     * @param _engine Unused; kept for compatibility (timing now comes from the engine's tween group)
+     */
     public static async tweenScalarPromise(
         _target: any,
         _key: string,
@@ -686,22 +755,17 @@ export class HelperFunctions {
         _engine?: Engine
     ): Promise<void> {
         const speed: number = _speed || 0.01;
+        const duration: number = Math.max(0, 1000 / (60 * speed));
         const origValue: number = _target[_key];
-        const tweenFunc: Function = _tweenFunc || HelperFunctions.lerp;
-        let progress: number = 0;
-        await new Promise((resolve2: Function): void => {
-            let intervalID: unknown;
-            intervalID = setInterval(() => {
-                progress = Math.min(progress + (speed * (_engine?.deltaTime || 1)), 1);
-                if (!_target) throw new Error("Missing target!");
-                _target[_key] = tweenFunc(origValue, _destValue, progress);
-                if (progress === 1) {
-                    // @ts-ignore
-                    clearInterval(intervalID);
-                    resolve2();
-                }
-            }, 0);
-        });
+        const tweenFunc = _tweenFunc || HelperFunctions.lerp;
+        // Tween a 0-1 progress value linearly and map it through tweenFunc onto the target
+        const progress = { t: 0 };
+        await HelperFunctions.TWEENAsPromise(
+            progress, "t", 1, Easing.Linear.None, duration, undefined,
+            (_obj, t) => {
+                _target[_key] = tweenFunc(origValue, _destValue, t);
+            }
+        ).promise;
         _target[_key] = _destValue;
     }
 
@@ -712,7 +776,9 @@ export class HelperFunctions {
     }
 
     /**
-     * @deprecated Use `HelperFunctions.TWEENVec3AsPromise`
+     * Linearly tweens x and y of `_sprite` to `_destination` (z is ignored) over `_duration` ms,
+     * on the engine's tween group.
+     * @deprecated Use `HelperFunctions.TWEENVec2AsPromise(_sprite, _destination, Easing.Linear.None, _duration).promise`
      * @param _sprite
      * @param _destination
      * @param _duration
@@ -722,13 +788,12 @@ export class HelperFunctions {
         _destination: { x: number, y: number, z?: number },
         _duration: number = 1000
     ): Promise<void> {
-
         return HelperFunctions.TWEENVec2AsPromise(
-            _sprite as Vector2,
-            _destination instanceof Vector2 ? _destination : new Vector2(_destination.x, _destination.y),
-            TWEEN.Easing.Linear.None,
+            _sprite,
+            _destination,
+            Easing.Linear.None,
             _duration
-        ).promise as unknown as Promise<void>;
+        ).promise;
     }
 
     /**
@@ -738,7 +803,7 @@ export class HelperFunctions {
     public static createInteractionEvent<T>(self: object, propKey: string): InteractionEvent<T> {
         return {
             add: (prop: T): string => {
-                const key: string = Math.random().toString().slice(2);
+                const key: string = uid();
                 // @ts-ignore
                 self[propKey][key] = (prop);
                 return key;

@@ -20,7 +20,7 @@ export function drawRegularPolygon(graphic: Graphics,
                                    sides: number,
                                    rotation = 0): Graphics
 {
-    sides = Math.max(sides | 0, 3);
+    sides = Math.max(Math.trunc(sides) || 0, 3);
     const startAngle = (-1 * Math.PI / 2) + rotation;
     const delta = (Math.PI * 2) / sides;
     const polygon = [];
@@ -35,5 +35,5 @@ export function drawRegularPolygon(graphic: Graphics,
         );
     }
 
-    return graphic.drawPolygon(polygon);
+    return graphic.poly(polygon);
 }

@@ -1,25 +1,14 @@
 import { Engine } from "./Engine";
-import { HelperFunctions } from "./HelperFunctions";
 import {
   AbstractRenderer,
   autoDetectRenderer,
-  Container as PIXIContainer,
   Graphics,
-  PRECISION,
   Renderer,
-  SCALE_MODES,
-  Text,
-  TextStyle,
-  WebGPURenderer,
-  WebWorkerAdapter,
-  DOMAdapter,
-  Color,
   WebGLRenderer,
   AutoDetectOptions,
 } from "pixi.js";
-import { TWhiskerConfig } from "../config/whiskerConfig";
+import { TResolvedWhiskerConfig } from "../config/whiskerConfig";
 import { ENGINE_DEBUG_MODE } from "./Constants/Constants";
-import { Easing } from "@tweenjs/tween.js";
 import isMobile from "is-mobile";
 import { ENGINE_ERROR } from "./ErrorCodes/EngineErrorCodes";
 
@@ -61,7 +50,7 @@ export class RenderManager {
     ENGINE["getStage"]().setChildIndex(debugGrid, 0);
   }
 
-  public async initializeRenderer(_config: TWhiskerConfig): Promise<void> {
+  public async initializeRenderer(_config: TResolvedWhiskerConfig): Promise<void> {
     // css stuff first
     document.body.style.margin = `0 0 0 0`;
     document.body.style.backgroundColor = "#000000";
@@ -70,13 +59,13 @@ export class RenderManager {
     document.body.style.backgroundSize = "100% 100%";
 
     const settings: Partial<AutoDetectOptions> = {
-      preference: _config.renderType || "webgpu",
+      preference: _config.renderType,
       // canvas: this.canvasElement,
       backgroundAlpha: _config.backgroundAlpha,
       antialias: _config.antialias,
       backgroundColor: _config.backgroundColor,
-      resolution: _config.devicePixelRatio || 1,
-      roundPixels: _config.roundPixels || false,
+      resolution: _config.devicePixelRatio,
+      roundPixels: _config.roundPixels,
       width: _config.width,
       height: _config.height,
       // Keep the canvas CSS size equal to the stage size (1 stage unit = 1 CSS pixel),
@@ -93,10 +82,12 @@ export class RenderManager {
       .catch(() => {
         throw new Error(ENGINE_ERROR.WEBGL_UNSUPPORTED);
       });
-    console.log(
-      "Initialized renderer to be %s",
-      this.renderer2d instanceof WebGLRenderer ? "WebGL" : "WebGPU",
-    );
+    if (ENGINE_DEBUG_MODE) {
+      console.log(
+        "Initialized renderer to be %s",
+        this.renderer2d instanceof WebGLRenderer ? "WebGL" : "WebGPU",
+      );
+    }
 
     this.canvasElement = this.renderer2d.canvas;
     this.canvasElement.id = "ui-canvas";
@@ -141,21 +132,28 @@ export class RenderManager {
     // Reading the live value keeps it sharp after browser zoom or moving to another monitor.
     const resolution = window.devicePixelRatio || 1;
     AbstractRenderer.defaultOptions.resolution = resolution;
-    _renderer.resize(_w, _h, resolution);
 
-    const height = _h - (_engine["_adjustHeightForBannerAd"] ? 60 : 0);
-    const windowHeight =
-      window.innerHeight - (_engine["_adjustHeightForBannerAd"] ? 60 : 0);
+    // A banner ad covers the bottom 60px: the stage is made that much shorter and the
+    // canvas is kept clear of it (rather than squashing the full-height image into less space)
+    const bannerHeight = _engine["_adjustHeightForBannerAd"] ? 60 : 0;
+    const height = _h - bannerHeight;
+    const windowHeight = window.innerHeight - bannerHeight;
+    _renderer.resize(_w, height, resolution);
 
     if (_engine["autoResize"] === "width") {
       const val = !isMobile()
         ? Math.ceil(Math.min(windowHeight, height * (window.innerWidth / _w)))
-        : window.innerHeight;
+        : windowHeight;
       // _renderer.resize(window.innerWidth, val);
       _renderer.canvas.style.width = `${window.innerWidth}px`;
       _renderer.canvas.style.height = `${val}px`;
-      _renderer.canvas.style.transform = `translateX(0%) translateY(-50%)`;
-      _renderer.canvas.style.top = `50%`;
+      if (bannerHeight > 0) {
+        _renderer.canvas.style.transform = `translateX(0%) translateY(0%)`;
+        _renderer.canvas.style.top = `0%`;
+      } else {
+        _renderer.canvas.style.transform = `translateX(0%) translateY(-50%)`;
+        _renderer.canvas.style.top = `50%`;
+      }
       _renderer.canvas.style.left = `0%`;
     } else if (_engine["autoResize"] === "height") {
       const val = !isMobile()
@@ -179,5 +177,5 @@ export class RenderManager {
     return this.renderer2d;
   }
 
-  public init(_engine: Engine, _config: TWhiskerConfig): void {}
+  public init(_engine: Engine, _config: TResolvedWhiskerConfig): void {}
 }

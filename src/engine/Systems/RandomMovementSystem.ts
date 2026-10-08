@@ -1,4 +1,6 @@
-import { Component, HelperFunctions, System } from "../../index";
+import { Component } from "../Component";
+import { HelperFunctions } from "../HelperFunctions";
+import { System } from "./System";
 import { ENGINE_DEBUG_MODE } from "../Constants/Constants";
 import { RandomMovementComponent } from "../Components/RandomMovementComponent";
 import { randomPointInsideUnitCircle } from "../HelperFunctions/randomPointInsideUnitCircle";
@@ -7,12 +9,6 @@ import { addVector } from "../HelperFunctions/addVector";
 import { smoothDampVec } from "../HelperFunctions/smoothDampVec";
 
 export class RandomMovementSystem extends System {
-    public static destroy(_component: Component): void {
-        if (ENGINE_DEBUG_MODE) {
-            console.log("Calling destroy for " + (_component.constructor as typeof Component).id);
-        }
-    }
-
     public static onAwake(_component: RandomMovementComponent): void {
         _component._smoothTime = 1.0 / (_component.speed);
     }

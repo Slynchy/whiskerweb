@@ -1,21 +1,12 @@
-import { PlayerDataSingleton } from "../PlayerDataSingleton";
+import { padTwoDigits, to12HourClock } from "./timeFormatting";
 
+/**
+ * Formats the current local wall-clock time on the 12-hour clock, compactly:
+ * unpadded hour, lowercase am/pm and no space, e.g. "3:05pm" or "12:30am".
+ * For a given timestamp, or the "03:05 PM" style, use `formatTimestampAs12HrClock`.
+ */
 export function formatCurrentTime(): string {
     const date = new Date(Date.now());
-    let hours = date.getHours();
-    const minutes = date.getMinutes();
-    let period = "am";
-
-    if (hours >= 12) {
-        period = "pm";
-        if (hours > 12) {
-            hours -= 12;
-        }
-    } else if (hours === 0) {
-        hours = 12;
-    }
-
-    const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes;
-
-    return `${hours}:${formattedMinutes}${period}`;
+    const { hours, isPm } = to12HourClock(date.getHours());
+    return `${hours}:${padTwoDigits(date.getMinutes())}${isPm ? "pm" : "am"}`;
 }

@@ -1,17 +1,19 @@
 
 export type AUDIO_EXTENSIONS = ".mp3" | ".ogg" | "";
 
-let _cachedResult: AUDIO_EXTENSIONS = "";
+// null until the first call; "" is a valid (cacheable) result meaning neither format is supported
+let _cachedResult: AUDIO_EXTENSIONS | null = null;
 export function getSupportedAudioFormat(): AUDIO_EXTENSIONS {
-    if(_cachedResult) return _cachedResult;
+    if(_cachedResult !== null) return _cachedResult;
 
     const audioElement = new Audio();
 
     if (audioElement.canPlayType("audio/mpeg")) {
-        return ".mp3";
+        _cachedResult = ".mp3";
     } else if (audioElement.canPlayType("audio/ogg")) {
-        return ".ogg";
+        _cachedResult = ".ogg";
     } else {
-        return "";
+        _cachedResult = "";
     }
+    return _cachedResult;
 }

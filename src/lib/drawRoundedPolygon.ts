@@ -22,12 +22,11 @@ export function drawRoundedPolygon(graphic: Graphics,
                                    corner: number,
                                    rotation = 0): Graphics
 {
-    sides = Math.max((sides | 0), 3);
+    sides = Math.max(Math.trunc(sides) || 0, 3);
 
     if (corner <= 0)
     {
-        // @ts-ignore
-        return graphic.drawRegularPolygon(x, y, radius, sides, rotation);
+        return graphic.regularPoly(x, y, radius, sides, rotation);
     }
 
     const sideLength = (radius * Math.sin(Math.PI / sides)) - 0.001;

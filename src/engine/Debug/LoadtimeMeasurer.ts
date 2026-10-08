@@ -20,7 +20,7 @@ export class LoadtimeMeasurer {
         }
         const now = Date.now();
         this._logs.push({
-            timeSinceLast: (this._logs.length > 1 ? now - this._logs[this._logs.length - 1].timestamp : 0),
+            timeSinceLast: (this._logs.length > 0 ? now - this._logs[this._logs.length - 1].timestamp : 0),
             timestamp: now,
             timeSinceFirst: now - (this._logs[0] || {timestamp: now}).timestamp,
             name: _name || this._logs.length.toString()

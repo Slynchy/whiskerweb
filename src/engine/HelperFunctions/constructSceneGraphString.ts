@@ -4,7 +4,7 @@ import { GameObject } from "../GameObject";
 export function constructSceneGraphString(scene: Scene, indentation?: number, child?: GameObject): string {
     // iterate over children recurisvely?
     const container = child || scene["getStage"]().parent;
-    let result = (container.name || (
+    let result = (container.label || (
         child ? child.constructor.name : "Unknown"
     )) + " - pos: (" + container.x + ", " + container.y + ")";
 

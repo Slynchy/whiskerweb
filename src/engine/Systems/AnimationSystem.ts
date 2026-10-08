@@ -1,5 +1,5 @@
 import { System } from "./System";
-import { AnimationComponent, AnimationType, RelativeType } from "../Components/AnimationComponent";
+import { AnimationComponent } from "../Components/AnimationComponent";
 import { GameObject } from "../GameObject";
 import { HelperFunctions } from "../HelperFunctions";
 import { ENGINE_DEBUG_MODE } from "../Constants/Constants";
@@ -16,7 +16,7 @@ export class AnimationSystem extends System {
 
     public static findInChildren(_component: AnimationComponent, path: string): GameObject | null {
         const index = OccurrencesInString(
-            _component.parent.name,
+            _component.parent.label,
             "!",
             false
         ) + 1;
@@ -36,7 +36,7 @@ export class AnimationSystem extends System {
         }
 
         _component._time = // Math.min(
-            _component._time + ((ENGINE.getTicker().elapsedMS / 1000) * _component.config.speed);
+            _component._time + ((ENGINE.getTicker().deltaMS / 1000) * _component.config.speed);
         // 1
         // );
         if (_component._time > 1) {
@@ -49,9 +49,8 @@ export class AnimationSystem extends System {
 
         Object.keys(_component.config.posNodes)
             .forEach((e) => {
-                const current = _component.config.posNodes[e];
                 const point = _component.posInterpolators[e].getPointAt(_component._time);
-                const target = _component._cachedElements[e] || (e === "root" ? _component.parent : null);
+                const target = _component.getTarget(e);
                 if (!target) {
                     if (ENGINE_DEBUG_MODE) {
                         // debugger;
@@ -65,9 +64,8 @@ export class AnimationSystem extends System {
             });
         Object.keys(_component.config.scaleNodes)
             .forEach((e) => {
-                const current = _component.config.scaleNodes[e];
                 const point = _component.scaleInterpolators[e].getPointAt(_component._time);
-                const target = _component._cachedElements[e] || (e === "root" ? _component.parent : null);
+                const target = _component.getTarget(e);
                 if (!target) return;
                 // if (_component.config.relativeType === RelativeType.Relative) {
                 target.scale.set(
@@ -77,9 +75,8 @@ export class AnimationSystem extends System {
             });
         Object.keys(_component.config.eulerNodes)
             .forEach((e) => {
-                const current = _component.config.eulerNodes[e];
                 const point = _component.angleInterpolators[e].getPointAt(_component._time);
-                const target = _component._cachedElements[e] || (e === "root" ? _component.parent : null);
+                const target = _component.getTarget(e);
                 if (!target) return;
                 target.rotation = -HelperFunctions.deg2rad(point[0]);
             });
@@ -119,11 +116,11 @@ export class AnimationSystem extends System {
         super.onDestroy(_component);
     }
 
+    // Called whenever the GameObject's active state changes. Nothing to do: onStep already
+    // skips inactive objects, and play/pause is setIsActive on the component.
     public static onEnable(_component: AnimationComponent): void {
-        super.onDestroy(_component);
     }
 
     public static onDisable(_component: AnimationComponent): void {
-        super.onDestroy(_component);
     }
 }

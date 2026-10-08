@@ -3,10 +3,13 @@ import {Engine} from "../Engine";
 import {Container, Graphics, Sprite, Texture} from "pixi.js";
 import {buttonify} from "../HelperFunctions/buttonify";
 import {IVector2} from "../Types/IVector2";
-import {HelperFunctions} from "../HelperFunctions";
+import {HelperFunctions, ITweenAnimationReturnValue} from "../HelperFunctions";
 import {Easing} from "@tweenjs/tween.js";
 
 export class InputTestState extends State {
+    private _container: Container = null;
+    private _spinAnim: ITweenAnimationReturnValue = null;
+
     onAwake(_engine: Engine, _params?: unknown): void {
         const texture =
             _engine.getPIXIResource("TestAsset") as Texture;
@@ -15,11 +18,7 @@ export class InputTestState extends State {
             y: 512
         };
 
-        const container = new Container();
-        container.position.set(
-            ENGINE.getRenderManager().width * 0.5,
-            ENGINE.getRenderManager().height * 0.5
-        );
+        const container = this._container = new Container();
         this.scene.addObject(container);
 
         const bg =
@@ -41,18 +40,24 @@ export class InputTestState extends State {
 
         buttonify(testSpr, {
             onFire: (ev) => {
-                HelperFunctions.TWEENAsPromise(
+                // stop any spin in progress so repeated clicks don't stack tweens
+                if (this._spinAnim) this._spinAnim.cancel();
+                const spin = this._spinAnim = HelperFunctions.TWEENAsPromise(
                     testSpr,
                     "rotation",
-                    Math.PI * 2,
+                    testSpr.rotation + Math.PI * 2,
                     Easing.Linear.None,
-                ).promise.then(() => {
-                    testSpr.rotation = 0;
+                );
+                spin.promise.then(() => {
+                    if (this._spinAnim !== spin) return; // superseded by a later click
+                    this._spinAnim = null;
+                    testSpr.rotation %= Math.PI * 2;
                 });
                 console.log(ev);
             }
         });
 
+        this.onResize(_engine);
         _engine.getTicker().start();
     }
 
@@ -65,6 +70,19 @@ export class InputTestState extends State {
     }
 
     onResize(_engine: Engine, _params?: unknown): void {
+        if (!this._container) return;
+        this._container.position.set(
+            _engine.getRenderManager().width * 0.5,
+            _engine.getRenderManager().height * 0.5
+        );
+    }
+
+    onDestroy(_engine: Engine): void {
+        // the sprite is destroyed with the stage; don't leave a tween writing to it
+        if (this._spinAnim) this._spinAnim.cancel();
+        this._spinAnim = null;
+        this._container = null;
+        super.onDestroy(_engine);
     }
 
 }

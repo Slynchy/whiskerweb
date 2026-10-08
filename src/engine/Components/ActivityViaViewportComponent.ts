@@ -13,6 +13,8 @@ export class ActivityViaViewportComponent extends Component {
     private _frameInterval: number = (Math.ceil(Math.random() * 3));
     private _frameCounter: number = 0;
     private _recursive: boolean = false;
+    // runs the viewport check on the PIXI ticker, since onStep stops once the parent is inactive
+    private _tickerCallback: () => void = null;
 
     constructor(_viewportRef: Rectangle, _recursive?: boolean) {
         super();

@@ -1,63 +1,80 @@
 import { Saver } from "./Saver";
 import { ENGINE_DEBUG_MODE } from "../Constants/Constants";
 import { IData } from "../Types/IData";
-import { HelperFunctions } from "../HelperFunctions";
 import { PlayerDataSingleton } from "../PlayerDataSingleton";
 
 export class SaveHandler {
 
     public getLatestData: (_data: Array<IData>) => IData = (_d: IData[]) => _d[0];
     private readonly _savers: Saver[] = [];
-    private _saveIntervalID: any = undefined;
-    public autoSave: number = -1;
+    private _saveIntervalID: ReturnType<typeof setInterval> | undefined = undefined;
+    private _autoSave: number = 0;
+    private _allowedToSave: boolean = false;
 
     constructor(_savers: Saver[]) {
         this._savers = _savers;
-        // this._getLatestData = _getLatestData;
+
+        // Autosave runs on an interval, so also write pending changes when the page is hidden or closed
+        const flushIfAutosaving = (): void => {
+            if (this._autoSave > 0) void this.flush();
+        };
+        document.addEventListener("visibilitychange", () => {
+            if (document.visibilityState === "hidden") flushIfAutosaving();
+        });
+        window.addEventListener("pagehide", flushIfAutosaving);
     }
 
-    private _allowedToSave: boolean = false;
+    /**
+     * Autosave interval in milliseconds; 0 (or less) turns autosave off
+     */
+    public get autoSave(): number {
+        return this._autoSave;
+    }
+
+    public set autoSave(_ms: number) {
+        this._autoSave = _ms > 0 ? _ms : 0;
+        this._updateAutoSave();
+    }
 
     public get allowedToSave(): boolean {
         return this._allowedToSave;
     }
 
     public set allowedToSave(_val: boolean) {
-        console.log("SaveHandler now " + (_val ? "" : "not ") + "allowed to save.");
-        this._allowedToSave = _val;
-
-        if (this.allowedToSave && Boolean(this.autoSave) && !this._saveIntervalID) {
-            this._saveIntervalID = setInterval(() => {
-                if (this.allowedToSave && PlayerDataSingleton.isDirty()) {
-                    console.log("Autosaving...");
-                    this.save(PlayerDataSingleton.export())
-                        .catch((err) => {
-                            console.error("Failed to autosave!");
-                            console.error(err);
-                        });
-                } else if (!this.allowedToSave) {
-                    clearInterval(this._saveIntervalID);
-                }
-            }, this.autoSave);
+        if (ENGINE_DEBUG_MODE) {
+            console.log("SaveHandler now " + (_val ? "" : "not ") + "allowed to save.");
         }
+        this._allowedToSave = _val;
+        this._updateAutoSave();
     }
 
+    /**
+     * Saves the PlayerDataSingleton keys changed since the last save.
+     * If saving fails, the keys stay dirty so the next save retries them.
+     */
+    public flush(): Promise<void> {
+        if (!this._allowedToSave || !PlayerDataSingleton.isDirty()) {
+            return Promise.resolve();
+        }
+        if (ENGINE_DEBUG_MODE) {
+            console.log("Saving...");
+        }
+        const data = PlayerDataSingleton.export();
+        return this.save(data).catch((err) => {
+            PlayerDataSingleton.dirtify(Object.keys(data));
+            console.error("Failed to save!");
+            console.error(err);
+        });
+    }
+
+    /**
+     * Saves the data with every saver; resolves once all of them have saved, rejects if any fails
+     */
     public async save(_data: IData): Promise<void> {
         if (!this._allowedToSave) {
-            return Promise.reject(new Error('SaveHandler is not currently allowed to save.'));
+            throw new Error('SaveHandler is not currently allowed to save.');
         }
-
-        return new Promise<void>((resolve: () => void, reject: (err: unknown) => void) => {
-            for (let i: number = 0; i < this._savers.length; i++) {
-                const iCache = i;
-                const curr: Saver = this._savers[i];
-
-                curr
-                    .save(_data)
-                    .then((_res) => iCache === 0 ? resolve() : null)
-                    .catch((err) => reject(err));
-            }
-        });
+        await Promise.all(this._savers.map((saver) => saver.save(_data)));
     }
 
     public async load(_keysToLoad?: string[]): Promise<IData> {
@@ -68,26 +85,23 @@ export class SaveHandler {
             console.log(`[SaveHandler] Loading keys ${_keysToLoad}`);
         }
 
-        const retry = () => {
-            const promises: Array<Promise<IData>> = [];
-            for (let i: number = 0; i < this._savers.length; i++) {
-                promises.push(
-                    this._savers[i].load(_keysToLoad).then((_data: IData) => {
-                        retVal[i] = (_data);
-                        return _data;
-                    })
-                );
+        const loadFrom = async (i: number): Promise<boolean> => {
+            try {
+                retVal[i] = await this._savers[i].load(_keysToLoad);
+                return true;
+            } catch (err) {
+                console.error(err);
+                return false;
             }
-            return Promise.allSettled(promises);
         };
 
-        await retry().catch((err) => {
-            console.error(err);
-            return HelperFunctions.wait(750).then(() => retry()).catch(() => {
-                console.error(err);
-                return Promise.reject(err);
-            });
-        });
+        const results = await Promise.all(this._savers.map((_s, i) => loadFrom(i)));
+        const failed = results.map((ok, i) => ok ? -1 : i).filter((i) => i !== -1);
+        if (failed.length > 0) {
+            // Retry the savers that failed once, after a short wait
+            await new Promise<void>((resolve) => setTimeout(resolve, 750));
+            await Promise.all(failed.map((i) => loadFrom(i)));
+        }
 
         return this.getLatestData(retVal);
     }
@@ -101,4 +115,13 @@ export class SaveHandler {
         return Promise.all(promises);
     }
 
+    private _updateAutoSave(): void {
+        if (this._saveIntervalID !== undefined) {
+            clearInterval(this._saveIntervalID);
+            this._saveIntervalID = undefined;
+        }
+        if (this._allowedToSave && this._autoSave > 0) {
+            this._saveIntervalID = setInterval(() => void this.flush(), this._autoSave);
+        }
+    }
 }
