@@ -46,9 +46,8 @@ export class RandomRotationComponent extends Component {
         this._initFromConfig();
     }
 
+    // Values come from the config unless their override flag is set; without a config the defaults are used
     _initFromConfig(): void {
-        if(!this.config)
-            return;
         this.maxAngleDelta =
             (Boolean(this.config) && !this._angleDeltaOverride) ? this.config.angleDelta : this._angleDelta;
         this.speed =
@@ -56,13 +55,14 @@ export class RandomRotationComponent extends Component {
         this.maxSpeed =
             (Boolean(this.config) && !this._maxSpeedOverride) ? this.config.maxSpeed : this._maxSpeed;
         this.minChangeDelay =
-            (Boolean(this.config) && !this._minChangeDelay) ? this.config.minChangeDelay : this._minChangeDelay;
+            (Boolean(this.config) && !this._minChangeDelayOverride) ? this.config.minChangeDelay : this._minChangeDelay;
         this.maxChangeDelay =
-            (Boolean(this.config) && !this._maxChangeDelay) ? this.config.maxChangeDelay : this._maxChangeDelay;
+            (Boolean(this.config) && !this._maxChangeDelayOverride) ? this.config.maxChangeDelay : this._maxChangeDelay;
     }
 
     onAttach(): void {
-        this._initialAngle = this.parent.rotation;
+        // degrees, like _destAngle and maxAngleDelta (rotation is radians)
+        this._initialAngle = this.parent.angle;
     }
 
     onComponentAttached(_componentId: string, _component: Component): void {

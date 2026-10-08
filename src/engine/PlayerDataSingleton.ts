@@ -10,7 +10,7 @@ class PlayerDataSingletonClass {
     private _initialized: boolean = false;
     private _keys: TSaveKey[] = [];
     private _data: IData = {};
-    private _dirty: Array<TSaveKey> = [];
+    private _dirty: Set<TSaveKey> = new Set();
 
     constructor() {}
 
@@ -20,14 +20,14 @@ class PlayerDataSingletonClass {
 
     public dirtify(key: (string | TSaveKey) | (string[] | TSaveKey[])): void {
         if(Array.isArray(key)) {
-            this._dirty.push(...(key as TSaveKey[]));
+            key.forEach((k) => this._dirty.add(k));
         } else {
-            this._dirty.push(key as TSaveKey);
+            this._dirty.add(key);
         }
     }
 
     public isDirty(): boolean {
-        return this._dirty.length > 0;
+        return this._dirty.size > 0;
     }
 
     public setData<T>(_key: TSaveKey, _value: T): void {
@@ -35,7 +35,8 @@ class PlayerDataSingletonClass {
             console.error(`Key ${_key} not found in PlayerDataSingleton`);
             return;
         }
-        if(this._data[_key] !== _value) {
+        // Objects and arrays are always marked dirty, since they may have been changed in place
+        if(this._data[_key] !== _value || (typeof _value === "object" && _value !== null)) {
             this.dirtify(_key);
         }
         this._data[_key] = _value;
@@ -50,43 +51,49 @@ class PlayerDataSingletonClass {
     }
 
     initialize(_keys: string[], _data?: IData): void {
-        const data = _data || {} as Record<string, unknown>;
         if (this.isInitialized()) {
             console.warn("PlayerDataSingleton being initialized multiple times");
         }
-        this._data = data || {};
+        this._data = { ...(_data || {}) };
         this._keys = _keys;
+        this._dirty.clear();
 
         this._initialized = true;
     }
 
+    /**
+     * Returns the keys changed since the last export (or every key, with `_exportAll`), and marks them clean
+     */
     public export(_exportAll: boolean = false): { [key: string]: unknown } {
         const retVal: { [key: string]: unknown } = {};
 
         Object.keys(this._data).forEach((_key) => {
-            if(this._dirty.indexOf(_key) !== -1 || _exportAll) {
+            if(this._dirty.has(_key) || _exportAll) {
                 retVal[_key] = this._data[_key];
             }
         });
-        this._dirty = [];
+        this._dirty.clear();
 
         return retVal;
     }
 
-    public resetAllData(): void {
-        // HACK
-        try {
-            window.localStorage.clear();
-        } catch(err) {
-            console.error(err);
-        }
-        // HACK
+    /**
+     * Resets every key to null and clears this game's keys from the savers.
+     * Keys stay registered, so getData/setData keep working.
+     */
+    public resetAllData(): Promise<void> {
+        this._data = {};
+        this._keys.forEach((key) => this._data[key] = null);
+        this._dirty.clear();
 
-        PlayerDataSingleton = new PlayerDataSingletonClass();
+        const saveHandler = typeof ENGINE !== "undefined" ? ENGINE.getSaveHandler() : undefined;
+        return saveHandler
+            ? saveHandler.clear().then(() => undefined)
+            : Promise.resolve();
     }
 }
 
-export let PlayerDataSingleton = new PlayerDataSingletonClass();
+export const PlayerDataSingleton = new PlayerDataSingletonClass();
 
 if(ENGINE_DEBUG_MODE) {
     // @ts-ignore

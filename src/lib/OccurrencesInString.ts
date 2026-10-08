@@ -17,7 +17,7 @@ export function OccurrencesInString(string: string, subString: string, allowOver
         pos = 0,
         step = allowOverlapping ? 1 : subString.length;
 
-    // eslint-disable-next-line no-constant-condition
+     
     while (true) {
         pos = string.indexOf(subString, pos);
         if (pos >= 0) {

@@ -9,12 +9,6 @@ import { addVector } from "../HelperFunctions/addVector";
 import { smoothDampVec } from "../HelperFunctions/smoothDampVec";
 
 export class RandomMovementSystem extends System {
-    public static destroy(_component: Component): void {
-        if (ENGINE_DEBUG_MODE) {
-            console.log("Calling destroy for " + (_component.constructor as typeof Component).id);
-        }
-    }
-
     public static onAwake(_component: RandomMovementComponent): void {
         _component._smoothTime = 1.0 / (_component.speed);
     }

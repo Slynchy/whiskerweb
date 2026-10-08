@@ -1,6 +1,9 @@
 import { ILoaderReturnValue, Loader } from "./Loader";
-import { HelperFunctions } from "../HelperFunctions";
 
+/**
+ * Loads JavaScript modules (typically the JS glue that a WASM build ships with) with `import()`,
+ * and caches the module namespace object.
+ */
 export class WASMLoader extends Loader<object> {
 
     private readonly _cache: {[key: string]: object} = {};
@@ -15,94 +18,50 @@ export class WASMLoader extends Loader<object> {
     }
 
     unload(_key: string): void {
-        if (this._cache[_key])
-            this._cache[_key] = undefined;
+        delete this._cache[_key];
     }
 
     public has(_key: string): boolean {
         return Boolean(this._cache[_key]);
     }
 
-    load(
+    async load(
         _onProgress?: (progress: number) => void
     ): Promise<ILoaderReturnValue> {
-        const returnValue: ILoaderReturnValue = {};
-        return new Promise<ILoaderReturnValue>( (resolve: Function, reject: Function): void => {
-            const keys: string[]
-                = Object.keys(this.queue).filter((key: string) => Object.hasOwnProperty.call(this.queue, key));
-            // tslint:disable-next-line:no-any
-            const promises: Array<Promise<any>> = [];
-
-            if(keys.length === 0) {
-                _onProgress ? _onProgress(100) : null;
-                return resolve(null);
-            }
-
-            // tslint:disable-next-line:prefer-for-of
-            for (let i: number = 0; i < keys.length; i++) {
-                const currKey: string = keys[i];
-                const currUrl: string = this.queue[currKey];
-                returnValue[currKey] = {success: false};
-                try {
-                    const element = document.createElement("script");
-                    element.type = "module";
-                    element.innerHTML = `
-import * as _wasmmodule from "${currUrl}";
-let intervalKey = 0;
-function addToCache() {
-    ENGINE["wasmLoader"].cache(
-        "${currKey}",
-        _wasmmodule
-    );
-}
-if(ENGINE) {
-    addToCache()
-} else {
-    intervalKey = setInterval(() => {
-        if(ENGINE) {
-            clearInterval(intervalKey);
-            addToCache();
+        const entries = Object.entries(this.queue);
+        this.queue = {};
+        if(entries.length === 0) {
+            _onProgress?.(100);
+            return {};
         }
-    })
-}
-`;
-                    document.body.appendChild(element);
-                    promises.push(
-                        HelperFunctions.waitForTruth(() => {
-                            return this.has(currKey);
-                        })
-                    );
-                } catch(err) {
-                    console.error(err);
-                    returnValue[currKey].error = err;
-                }
-            }
 
+        return this.trackLoading(async () => {
+            const returnValue: ILoaderReturnValue = {};
             let counter = 0;
-            const len = promises.length;
-            _onProgress ? _onProgress(0) : null;
-            promises.forEach((e) => {
-                e.then((e) => {
-                    ++counter;
-                    _onProgress ? _onProgress((counter / len) * 100) : null;
-                });
-            });
+            _onProgress?.(0);
 
-            Promise.allSettled(promises)
-                .then(() => {
-                    // responses.forEach((e: object, i: number) => {
-                    //     this._cache[keys[i]] = e;
-                    //     returnValue[keys[i]].success = true;
-                    // });
-                    resolve();
-                });
+            await Promise.all(entries.map(async ([key, path]) => {
+                // Resolve against the page, as the old <script type="module"> approach did
+                const url = new URL(path, document.baseURI).href;
+                try {
+                    let module: object;
+                    try {
+                        module = await import(/* webpackIgnore: true */ url);
+                    } catch {
+                        // One retry
+                        module = await import(/* webpackIgnore: true */ url);
+                    }
+                    this.cache(key, module);
+                    returnValue[key] = { success: true };
+                } catch (err) {
+                    console.error(err);
+                    returnValue[key] = { success: false, error: err as Error };
+                }
+                counter++;
+                _onProgress?.((counter / entries.length) * 100);
+            }));
 
-            // (function(){
-            // return new Promise((_______resolve) => {
-            // Module['onRuntimeInitialized'] = function() {
-            //   _______resolve();
-            // };
-            // });})()
+            return returnValue;
         });
     }
 

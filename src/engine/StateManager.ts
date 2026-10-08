@@ -1,5 +1,6 @@
 import { State } from "./State";
 import { Engine } from "./Engine";
+import { ENGINE_DEBUG_MODE } from "./Constants/Constants";
 
 export class StateManager {
   private engine: Engine;
@@ -23,16 +24,19 @@ export class StateManager {
 
   public setState(_state: State, _params?: unknown): Promise<void> {
     if (this.currentState) {
-      this.currentState.onDestroy(this.engine);
-      this.currentState.scene.getStage().destroy({ children: true });
+      const oldState = this.currentState;
       this.currentState = undefined;
+      oldState.onDestroy(this.engine);
+      oldState.scene.getStage()?.destroy({ children: true });
     }
     this.currentState = _state;
-    this.currentState.getScene().onApply(this.engine);
-    return this.currentState
-      .preload(this.engine)
-      .then(() => console.log("Preload complete"))
-      .then(() => this.currentState.onAwake(this.engine, _params || undefined));
+    _state.getScene().onApply(this.engine);
+    return _state.preload(this.engine).then(() => {
+      // Another changeState happened while this state was preloading
+      if (this.currentState !== _state) return;
+      if (ENGINE_DEBUG_MODE) console.log("Preload complete");
+      _state.onAwake(this.engine, _params);
+    });
   }
 
   public onStep(): void {

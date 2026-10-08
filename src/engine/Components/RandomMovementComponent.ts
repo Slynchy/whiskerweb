@@ -52,9 +52,8 @@ export class RandomMovementComponent extends Component {
         this._initFromConfig();
     }
 
+    // Values come from the config unless their override flag is set; without a config the defaults are used
     _initFromConfig(): void {
-        if(!this.config)
-            return;
         this.distance =
             (Boolean(this.config) && !this._distanceOverride) ? this.config.distance : this._distance;
         this.speed =
@@ -62,9 +61,9 @@ export class RandomMovementComponent extends Component {
         this.maxSpeed =
             (Boolean(this.config) && !this._maxSpeedOverride) ? this.config.maxSpeed : this._maxSpeed;
         this.minChangeDelay =
-            (Boolean(this.config) && !this._minChangeDelay) ? this.config.minChangeDelay : this._minChangeDelay;
+            (Boolean(this.config) && !this._minChangeDelayOverride) ? this.config.minChangeDelay : this._minChangeDelay;
         this.maxChangeDelay =
-            (Boolean(this.config) && !this._maxChangeDelay) ? this.config.maxChangeDelay : this._maxChangeDelay;
+            (Boolean(this.config) && !this._maxChangeDelayOverride) ? this.config.maxChangeDelay : this._maxChangeDelay;
     }
 
     onAttach(): void {

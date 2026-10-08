@@ -9,7 +9,7 @@ export class Scene {
     constructor() {}
 
     public addObject(obj: GameObject | DisplayObject): void {
-        if (!this.stage) this.createStage();
+        if (!this.stage || this.stage.destroyed) this.createStage();
         try {
             HelperFunctions.addToStage(this.stage, obj);
         } catch (err) {
@@ -30,23 +30,26 @@ export class Scene {
     }
 
     public destroyAllObjects(): void {
-        this.stage.parent?.removeChild(this.stage);
-        this.stage.destroy({
-            children: true
-        });
-        this.stage = new Container();
-        this.removeAllObjects();
-    }
-
-    public removeAllObjects(_destroy?: boolean): void {
-        this.stage.children.forEach((e) => this.stage.removeChild(e));
+        this.removeAllObjects(true);
     }
 
     /**
-     * Called when adding the scene to the engine
+     * Removes every object from the scene
+     * @param _destroy Also destroy them (and their children)
+     */
+    public removeAllObjects(_destroy?: boolean): void {
+        const removed = this.stage.removeChildren();
+        if (_destroy) {
+            removed.forEach((e) => e.destroy({ children: true }));
+        }
+    }
+
+    /**
+     * Called when adding the scene to the engine.
+     * A scene whose stage was destroyed (its state was left earlier) gets a fresh one.
      */
     public onApply(_engine: Engine): void {
-        if (!this.stage) this.createStage();
+        if (!this.stage || this.stage.destroyed) this.createStage();
         _engine["getStage"]().addChild(this.stage);
     }
 
@@ -58,17 +61,20 @@ export class Scene {
     }
 
     public onStep(_engine: Engine): void {
-        const update = (e: GameObject | DisplayObject) => {
-            if (e instanceof GameObject || e instanceof Container) {
-                // @ts-ignore
-                if (e.onStep) {
-                    // @ts-ignore
-                    e.onStep(_engine.deltaTime);
-                }
-                e.children.forEach((e) => update(e));
-            }
-        };
-        this.stage.children.forEach((e) => update(e));
+        this.stage.children.forEach((e) => Scene.stepObject(e, _engine.deltaTime));
+    }
+
+    /**
+     * Calls `onStep(dt)` on the object, if it has one, and then on all of its descendants
+     */
+    public static stepObject(_obj: GameObject | DisplayObject, _dt: number): void {
+        if (!(_obj instanceof Container)) return;
+        // @ts-ignore
+        if (_obj.onStep) {
+            // @ts-ignore
+            _obj.onStep(_dt);
+        }
+        _obj.children.forEach((e) => Scene.stepObject(e, _dt));
     }
 
     public getStage(): Container {

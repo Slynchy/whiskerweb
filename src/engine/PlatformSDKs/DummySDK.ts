@@ -1,12 +1,15 @@
 import { PlatformSDK } from "./PlatformSDK";
-import { IPlayerInfo } from "../Types/IPlayerInfo";
 import { DEFAULT_TEXTURE_B64 } from "../Constants/Constants";
 import { AD_TYPE } from "../Types/AdType";
 import { PurchaseResult } from "../Types/PurchaseResult";
 import { uid } from "../HelperFunctions/uid";
-import { IAPNames, IAPProductID } from "../Constants/IAPData";
 import { IPlatformFriend } from "../Types/IPlatformFriend";
 
+/**
+ * The "offline" platform (config `gamePlatform: "offline"`, the default).
+ * Uses PlatformSDK's offline defaults, but simulates ads, in-app purchases, contexts, a friend and a test player,
+ * so those game flows can be exercised in a browser: every ad "shows" instantly and every purchase succeeds.
+ */
 export class DummySDK extends PlatformSDK {
 
     private _contextId: string = null;
@@ -23,53 +26,8 @@ export class DummySDK extends PlatformSDK {
         return true;
     }
 
-    public requestHapticFeedbackAsync(): Promise<boolean> {
-        try {
-            window.navigator.vibrate(100);
-            return Promise.resolve(true);
-        } catch(err) {
-            return Promise.resolve(false);
-        }
-    }
-
-    public addOnPauseCallback(cb: () => void): void {
-        if(!ENGINE.pauseOnFocusLoss) return;
-        window.onblur = cb as (this: GlobalEventHandlers, ev: FocusEvent) => any;
-    }
-
-    public addOnResumeCallback(cb: () => void): void {
-        if(!ENGINE.pauseOnFocusLoss) return;
-        window.onfocus = cb as (this: GlobalEventHandlers, ev: FocusEvent) => any;
-    }
-
-    public setLoadingProgress(_progress: number): Promise<void> {
-        const obj = ENGINE["loadingScreenObject"];
-        if(
-            obj &&
-            // @ts-ignore
-            typeof whiskerConfig.loadingScreenComponent["progress"] !== "undefined"
-        ) {
-            // @ts-ignore
-            whiskerConfig.loadingScreenComponent["progress"] = _progress;
-        }
-
-        return Promise.resolve(undefined);
-    }
-
-    public initialize(): Promise<void> {
-        return Promise.resolve(undefined);
-    }
-
-    public startGame(): Promise<void> {
-        return Promise.resolve(undefined);
-    }
-
     public getContextId(): string {
         return this._contextId;
-    }
-
-    public getContextType(): string {
-        return "SOLO";
     }
 
     public getPlayerId(): string {
@@ -78,10 +36,6 @@ export class DummySDK extends PlatformSDK {
 
     public getEntryPointAsync(): Promise<string> {
         return Promise.resolve("debug");
-    }
-
-    public submitTournamentScoreAsync(_score: number): Promise<void> {
-        return Promise.resolve();
     }
 
     public switchContext(_id: string): Promise<boolean> {
@@ -100,66 +54,12 @@ export class DummySDK extends PlatformSDK {
         };
     }
 
-    public getPlayerInfo(): IPlayerInfo {
-        return {
-            playerId: this.getPlayerId(),
-            contextId: this.getContextId(),
-            contextType: this.getContextType(),
-            playerPicUrl: this.getPlayerPicUrl(),
-            playerName: this.getPlayerName(),
-        };
-    }
-
     public getPlayerName(): string {
         return "TEST";
     }
 
     public getPlayerPicUrl(): string {
         return DEFAULT_TEXTURE_B64;
-    }
-
-    public flush(): Promise<void> {
-        return Promise.resolve(undefined);
-    }
-
-    public load(): Promise<Record<string, unknown>> {
-        return Promise.resolve({});
-    }
-
-    public save(_data: Record<string, unknown>): Promise<void> {
-        return Promise.resolve(undefined);
-    }
-
-    isReady(): boolean {
-        return true;
-    }
-
-    public getPlayerLocale(): string {
-        return "en_GB"; // ja_JP
-    }
-
-    hideBannerAd(_placementId: string): Promise<void> {
-        return Promise.resolve(undefined);
-    }
-
-    showBannerAd(_placementId: string): Promise<void> {
-        return Promise.resolve(undefined);
-    }
-
-    getEntryPointData(): { [key: string]: unknown } {
-        return {};
-    }
-
-    createContext(_suggestedPlayerID: string | Array<string> | null): Promise<void> {
-        return Promise.resolve();
-    }
-
-    getIAPCatalog(): Promise<any> {
-        return Promise.resolve();
-    }
-
-    getSignedInfo(_payload?: string): Promise<any> {
-        return Promise.reject(new Error("Not supported in localhost"));
     }
 
     getFriends(): Promise<IPlatformFriend[]> {

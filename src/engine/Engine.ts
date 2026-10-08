@@ -6,19 +6,25 @@ import {
   Texture as PIXITexture,
   Ticker as PIXITicker,
   SCALE_MODE,
+  TextureSource,
   WebGLRenderer,
   Texture,
 } from "pixi.js";
 import { RenderManager } from "./RenderManager";
 import { PIXILoader } from "./Loaders/PIXILoader";
-import { TWhiskerConfig } from "../config/whiskerConfig";
+import {
+  resolveWhiskerConfig,
+  TResolvedWhiskerConfig,
+  TWhiskerConfig,
+} from "../config/whiskerConfig";
 import {
   ENGINE_DEBUG_MODE,
   LOADTIME_DEBUG_MODE,
 } from "./Constants/Constants";
 import { __WWVERSION } from "./Constants/Version";
 import { ENGINE_ERROR } from "./ErrorCodes/EngineErrorCodes";
-import * as TWEEN from "@tweenjs/tween.js";
+import { Group, Tween } from "@tweenjs/tween.js";
+import { tweenGroup, updateTweens } from "./TweenGroup";
 import { PlatformSDK } from "./PlatformSDKs/PlatformSDK";
 import { DummySDK } from "./PlatformSDKs/DummySDK";
 import { SaveHandler } from "./Savers/SaveHandler";
@@ -26,32 +32,24 @@ import { LocalStorageSaver } from "./Savers/LocalStorageSaver";
 import { Saver } from "./Savers/Saver";
 import { AnalyticsHandler } from "./Analytics/AnalyticsHandler";
 import { BaseAnalytics } from "./Analytics/BaseAnalytics";
-import { FirebaseAnalytics } from "./Analytics/FirebaseAnalytics";
 import { LoadtimeMeasurer } from "./Debug/LoadtimeMeasurer";
 import { GameObject } from "./GameObject";
 import { HelperFunctions } from "./HelperFunctions";
-import { FirebaseSingleton } from "./FirebaseSingleton";
-import { FirebaseFeatures } from "./Types/FirebaseFeatures";
 import { PlayerDataSingleton } from "./PlayerDataSingleton";
-import { AdIDs } from "./Constants/AdIDs";
 import { LoaderType } from "./Loaders/LoaderType";
-import { AdPlacements } from "./Types/AdPlacements";
 import isMobile from "is-mobile";
 import { JSONLoader } from "./Loaders/JSONLoader";
 import { WASMLoader } from "./Loaders/WASMLoader";
-import { GameAnalytics } from "./Analytics/GameAnalytics";
-import { CapacitorSDK } from "./PlatformSDKs/CapacitorSDK";
 import { LogoAscii } from "../config/ascii";
+import { Scene } from "./Scene";
 import InputManager from "./InputManager";
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const Stats = require("stats.js");
 
 declare global {
   const ENGINE: Engine;
   // const _PAGE_START_TIME: number;
 }
-
-let _INITIAL_LOAD_TIME: number = -1;
 
 type TAutoResize = "either" | "width" | "height" | "none";
 
@@ -96,6 +94,9 @@ export class Engine {
   > = [];
   private _loadAssetsPromise: Promise<void>;
   private _adjustHeightForBannerAd: boolean = false;
+  private _pausedTweens: Tween[] = [];
+  private _paused: boolean = false;
+  private _config: TResolvedWhiskerConfig = resolveWhiskerConfig();
 
   constructor() {
     if ((window as unknown as { ENGINE: Engine }).ENGINE)
@@ -214,20 +215,24 @@ export class Engine {
    * @returns The texture, or `Texture.EMPTY` (with a warning) if it isn't loaded
    */
   public getTexture(_key: string): PIXITexture {
-    if (this.loader.has(_key)) {
-      return this.loader.get(_key);
+    const asset: unknown = this.loader.get(_key);
+    if (asset instanceof Texture) {
+      return asset;
     }
-    console.warn("Failed to find texture %s", _key);
+    console.warn(
+      asset ? "%s is not a texture (is it a spritesheet?)" : "Failed to find texture %s",
+      _key,
+    );
     return Texture.EMPTY;
   }
 
   /**
-   * Sets the scale mode for the renderer
-   * @deprecated Not yet implemented as of PIXI v8 upgrade
+   * Sets the default scale mode for textures created after this call
+   * (so call it before loading the assets it should apply to)
    * @param scaleMode "nearest" or "linear"
    */
   public setScaleMode(scaleMode: SCALE_MODE): void {
-    console.warn("setScaleMode not working as of pixi v8 upgrade");
+    TextureSource.defaultOptions.scaleMode = scaleMode;
   }
 
   /**
@@ -242,12 +247,11 @@ export class Engine {
   }
 
   /**
-   * Initializes the Firebase analytics module with the analytics handler
+   * Adds an analytics module after init (e.g. once the player has consented).
+   * Call `initializeAnalytics()` afterwards if the handler wasn't initialised yet.
    */
-  public initializeFirebaseAnalytics(): void {
-    this.analyticsHandler.addModule(
-      new FirebaseAnalytics(FirebaseSingleton.getAnalytics()),
-    );
+  public addAnalyticsModule(_module: BaseAnalytics): void {
+    this.analyticsHandler.addModule(_module);
   }
 
   /**
@@ -268,44 +272,6 @@ export class Engine {
       return Promise.resolve(false);
     else {
       return this.platformSDK.requestHapticFeedbackAsync();
-    }
-  }
-
-  /**
-   * Tracks the initial load time of the game
-   * @deprecated Not currently working
-   */
-  public trackInitialLoadTime(): Promise<void> {
-    throw new Error("Not currently working");
-
-    if (_INITIAL_LOAD_TIME === -1) {
-      const done = () => {
-        _INITIAL_LOAD_TIME = Date.now(); // - _PAGE_START_TIME;
-        // this.logEvent(
-        //     "SHLoadTime",
-        //     _INITIAL_LOAD_TIME,
-        // );
-        console.log(`Loadtime was ` + _INITIAL_LOAD_TIME + `ms`);
-
-        // fixme: HACK!
-        if (this.platformSDK.isAdsSupported()) {
-          this.platformSDK
-            .showBannerAd(AdIDs[AdPlacements.BANNER])
-            .catch((err) => console.error(err));
-        }
-      };
-      this.platformSDK.setLoadingProgress(100);
-      return this.platformSDK
-        .startGame()
-        .then(() => done())
-        .catch(() => done());
-    } else {
-      if (this.platformSDK.isAdsSupported()) {
-        this.platformSDK
-          .showBannerAd(AdIDs[AdPlacements.BANNER])
-          .catch((err) => console.error(err));
-      }
-      return Promise.resolve();
     }
   }
 
@@ -357,12 +323,56 @@ export class Engine {
   }
 
   /**
-   * Unloads the current state and loads the specified state
+   * Unloads the current state and loads the specified state.
+   * With config `showLoadingScreenOnStateChange`, the loading screen is shown (at 0% progress) until the
+   * new state has awoken, and hidden then if `autoHideLoadingScreen` is set. It stays up if preload fails.
    * @param _newState
    * @param _params Parameters to pass to the new state
    */
   public changeState(_newState: State, _params?: unknown): Promise<void> {
-    return this.stateManager.setState(_newState, _params);
+    if (this._config.showLoadingScreenOnStateChange) {
+      this.showLoadingScreen();
+    }
+    return this.stateManager.setState(_newState, _params).then(() => {
+      // Skip if another changeState replaced this state while it was loading
+      if (
+        this._config.autoHideLoadingScreen &&
+        this.getActiveState() === _newState
+      ) {
+        this.hideLoadingScreen();
+      }
+    });
+  }
+
+  /**
+   * Shows the loading screen (if config `loadingScreenComponent` was set) above everything, at 0% progress
+   */
+  public showLoadingScreen(): void {
+    if (!this.loadingScreenObject) return;
+    this.setLoadingScreenProgress(0);
+    this.loadingScreenObject.visible = true;
+  }
+
+  public hideLoadingScreen(): void {
+    if (!this.loadingScreenObject) return;
+    this.loadingScreenObject.visible = false;
+  }
+
+  public get isLoadingScreenVisible(): boolean {
+    return Boolean(this.loadingScreenObject?.visible);
+  }
+
+  /**
+   * Sets `progress` (0-100) on every component of the loading screen that has a `progress` property.
+   * `loadAssets` calls this while the loading screen is visible.
+   */
+  public setLoadingScreenProgress(_progress: number): void {
+    if (!this.loadingScreenObject) return;
+    this.loadingScreenObject.getComponents().forEach((component) => {
+      if ("progress" in component) {
+        (component as unknown as { progress: number }).progress = _progress;
+      }
+    });
   }
 
   /**
@@ -378,6 +388,43 @@ export class Engine {
    */
   public setMaxFPS(fps: number): void {
     this.ticker.maxFPS = fps;
+  }
+
+  /**
+   * Stops the ticker and pauses every running tween, so tweens carry on from the same point on `resume()`.
+   * (Tweens run on wall-clock time, so stopping the ticker alone makes them jump ahead when it restarts.)
+   */
+  public pause(): void {
+    if (this._paused) return;
+    this._paused = true;
+    this.ticker.stop();
+    this._pausedTweens = tweenGroup
+      .getAll()
+      .filter((t) => t.isPlaying() && !t.isPaused());
+    this._pausedTweens.forEach((t) => t.pause());
+  }
+
+  /**
+   * Undoes `pause()`: resumes the paused tweens and starts the ticker
+   */
+  public resume(): void {
+    if (!this._paused) return;
+    this._paused = false;
+    this._pausedTweens.forEach((t) => t.resume());
+    this._pausedTweens = [];
+    this.ticker.start();
+  }
+
+  /**
+   * The tween group the engine updates each frame (also exported as `tweenGroup`).
+   * tween.js doesn't put new tweens in any group, so add yours to this one.
+   */
+  public getTweenGroup(): Group {
+    return tweenGroup;
+  }
+
+  public get isPaused(): boolean {
+    return this._paused;
   }
 
   /**
@@ -397,8 +444,8 @@ export class Engine {
    * @param key
    */
   public hasPIXIResource(key: string): boolean {
-    let exists = this.loader.has(key);
-    let target = exists ? this.loader.get(key) : null;
+    const exists = this.loader.has(key);
+    const target = exists ? this.loader.get(key) : null;
     return exists && !(target as any)?.error;
   }
 
@@ -419,7 +466,6 @@ export class Engine {
     } else {
       return tex;
     }
-    return tex && tex.texture ? tex.texture : tex;
   }
 
   /**
@@ -433,7 +479,8 @@ export class Engine {
   }
 
   /**
-   * Unloads the specified asset from the PIXI loader cache
+   * Unloads the specified asset from the PIXI loader cache.
+   * Assets loaded through `loadAssets` are also unloaded from PIXI Assets, which destroys their textures.
    * @param key
    */
   public unloadPIXIResource(key: string): void {
@@ -482,7 +529,7 @@ export class Engine {
    * Function that is called when a resize event is called, or to force a resize
    */
   public onResize(): void {
-    console.log("Resize triggered");
+    if (ENGINE_DEBUG_MODE) console.log("Resize triggered");
     this.resizeRenderer(window.innerWidth, window.innerHeight, this.autoResize);
     this.getActiveState()?.onResize?.(this);
   }
@@ -530,17 +577,18 @@ export class Engine {
   /**
    * Main initialization function for the engine
    * @param _initialState State to load into
-   * @param _config Configuration object for engine
+   * @param _userConfig Configuration object for engine; every field is optional (see `TWhiskerConfig`)
    * @param _onProgress (optional) Callback for loading progress
    */
   public async init(
     _initialState: State,
-    _config: TWhiskerConfig,
+    _userConfig: TWhiskerConfig = {},
     _onProgress?: (_val: number) => void,
   ): Promise<unknown> {
+    const _config = (this._config = resolveWhiskerConfig(_userConfig));
     await this.inputManager.initialize();
-    this._adjustHeightForBannerAd = _config.adjustHeightForBannerAd || false;
-    this.pauseOnFocusLoss = _config.pauseOnFocusLoss || false;
+    this._adjustHeightForBannerAd = _config.adjustHeightForBannerAd;
+    this.pauseOnFocusLoss = _config.pauseOnFocusLoss;
     this.setScaleMode(_config.scaleMode);
     if (_config.autoResize === "either" || _config.autoResize === "auto") {
       this.autoResize = _config.height > _config.width ? "height" : "width";
@@ -548,16 +596,7 @@ export class Engine {
       this.autoResize = _config.autoResize;
     }
 
-    // init firebase
-    if (_config.autoInitFirebase) {
-      FirebaseSingleton.initialize([
-        FirebaseFeatures.Auth,
-        FirebaseFeatures.Analytics,
-        FirebaseFeatures.Functions,
-      ]);
-      this.initializeFirebaseAnalytics();
-    }
-    if (_config.logErrors === "firebase") {
+    if (_config.logErrors === "analytics" || _config.logErrors === "firebase") {
       // init hook
       this._setupHookOnError();
 
@@ -604,55 +643,39 @@ export class Engine {
     this.renderManager.init(this, _config);
     if (_config.autoResize !== "none") this.hookResize();
 
-    const analyticsModules: BaseAnalytics[] = [];
-    const savers: Saver[] = [];
-    if (typeof _config.gamePlatform === "string") {
-      switch (_config.gamePlatform) {
-        case "capacitor":
-          savers.push(new LocalStorageSaver());
-          this.platformSdk = new CapacitorSDK();
-          analyticsModules.push(new GameAnalytics());
-          break;
-        case "offline":
-        default:
-          savers.push(new LocalStorageSaver());
-          this.platformSdk = new DummySDK();
-          analyticsModules.push(new GameAnalytics());
-          break;
-      }
-    } else {
-      // custom PlatformSDK subclass
-      savers.push(new LocalStorageSaver());
-      this.platformSdk = new _config.gamePlatform();
-      analyticsModules.push(new GameAnalytics());
+    const savers: Saver[] = [new LocalStorageSaver(_config.saveKeyPrefix)];
+    this.platformSdk = Engine.createPlatformSDK(_config.gamePlatform);
+    this.analyticsHandler = new AnalyticsHandler([..._config.analytics]);
+
+    try {
+      await this.platformSdk.initialize();
+    } catch (err) {
+      console.error("Platform SDK failed to initialize", err);
     }
 
     // Must come after the platform SDK exists, since the callbacks are registered on it
     if (_config.pauseOnFocusLoss) {
-      // Only resume the ticker if it was running when focus was lost,
+      // Only resume if the game was running when focus was lost,
       // so we never start a ticker the game hasn't started itself
       let resumeOnFocus = false;
       this.platformSdk.addOnPauseCallback(() => {
-        if (!this.ticker.started) return;
-        this.ticker.stop();
+        if (!this.ticker.started || this._paused) return;
+        this.pause();
         resumeOnFocus = true;
       });
       this.platformSdk.addOnResumeCallback(() => {
         if (!resumeOnFocus) return;
         resumeOnFocus = false;
-        this.ticker.start();
+        this.resume();
       });
     }
 
-    this.analyticsHandler = new AnalyticsHandler(analyticsModules);
     if (_config.autoInitAnalytics) {
       this.analyticsHandler.initialize();
     }
     this.saveHandler = new SaveHandler(savers);
-    if (_config.getLatestData) {
-      this.saveHandler.getLatestData = _config.getLatestData;
-    }
-    this.saveHandler.autoSave = _config.autoSave || -1;
+    this.saveHandler.getLatestData = _config.getLatestData;
+    this.saveHandler.autoSave = _config.autoSave;
     PlayerDataSingleton.initialize(
       _config.playerDataKeys,
       await this.saveHandler.load(_config.playerDataKeys),
@@ -663,9 +686,6 @@ export class Engine {
       this.getTicker().stop();
     } else {
       this.getTicker().start();
-    }
-    if (_config.autoInitAnalytics) {
-      this.initializeAnalytics();
     }
 
     this.platformSdk.setLoadingProgress(25);
@@ -714,7 +734,7 @@ ${LogoAscii}
         console.log("BootAssets load progress %i", p);
       }
       this.platformSDK.setLoadingProgress(p);
-      _onProgress ? _onProgress(p) : null;
+      _onProgress?.(p);
     })
       .then(() => {
         // process spritesheets
@@ -732,12 +752,8 @@ ${LogoAscii}
           console.log("Successfully loaded bootassets");
         }
       })
+      // changeState hides the loading screen afterwards when autoHideLoadingScreen is set
       .then(() => this.changeState(_initialState))
-      .then(() =>
-        _config.autoHideLoadingScreen && this.loadingScreenObject
-          ? (this.loadingScreenObject.visible = false)
-          : null,
-      )
       .catch((err) => {
         // Fatal!
         console.error(err);
@@ -751,128 +767,102 @@ ${LogoAscii}
   }
 
   /**
-   * Loads the specified assets using the specified loaders
+   * Loads the specified assets using the specified loaders.
+   * Calls run one at a time (a call made during another waits for it).
+   * Each loader retries a failed asset once; rejects (after everything else has loaded)
+   * if any asset still failed.
    * @param _assets
-   * @param _onProgress (optional) Callback for loading progress
+   * @param _onProgress (optional) Callback for loading progress, 0 to 100
    */
   public loadAssets(
     _assets: Array<{ key: string; path: string; type: LoaderType }>,
     _onProgress?: (_prog: number) => void,
   ): Promise<void> {
-    if (this._loadAssetsPromise) {
-      return this._loadAssetsPromise.then(() =>
-        this.loadAssets(_assets, _onProgress),
+    const previous = this._loadAssetsPromise || Promise.resolve();
+    const current = previous
+      .catch((): void => undefined)
+      .then(() => this._loadAssetsNow(_assets, _onProgress));
+    this._loadAssetsPromise = current;
+    const clear = (): void => {
+      if (this._loadAssetsPromise === current) this._loadAssetsPromise = null;
+    };
+    current.then(clear, clear);
+    return current;
+  }
+
+  private async _loadAssetsNow(
+    _assets: Array<{ key: string; path: string; type: LoaderType }>,
+    _onProgress?: (_prog: number) => void,
+  ): Promise<void> {
+    const loaders: Partial<
+      Record<LoaderType, PIXILoader | JSONLoader | WASMLoader>
+    > = {};
+    for (const asset of _assets) {
+      if (!asset) continue;
+      let loader: PIXILoader | JSONLoader | WASMLoader;
+      switch (asset.type) {
+        case LoaderType.PIXI:
+          loader = this.loader;
+          break;
+        case LoaderType.JSON:
+          loader = this.jsonLoader;
+          break;
+        case LoaderType.WASM:
+          loader = this.wasmLoader;
+          break;
+        default:
+          console.warn("Unknown asset type %s for %s", asset.type, asset.key);
+          continue;
+      }
+      loader.add(asset.key, `./assets/${asset.path}`);
+      loaders[asset.type] = loader;
+    }
+
+    // Each loader reports 0-100; overall progress is their average.
+    // It also goes to the loading screen while that is visible.
+    const report = (p: number): void => {
+      if (this.isLoadingScreenVisible) this.setLoadingScreenProgress(p);
+      _onProgress?.(p);
+    };
+    const used = Object.values(loaders);
+    const progress = used.map(() => 0);
+    const results = await Promise.all(
+      used.map((loader, i) =>
+        loader.load((p: number) => {
+          progress[i] = p;
+          report(progress.reduce((a, b) => a + b, 0) / progress.length);
+        }),
+      ),
+    );
+    if (used.length === 0) report(100);
+
+    const failed: string[] = [];
+    results.forEach((result) =>
+      Object.keys(result || {}).forEach((key) => {
+        if (!result[key].success) failed.push(key);
+      }),
+    );
+    if (failed.length > 0) {
+      throw new Error(`Failed to load assets: ${failed.join(", ")}`);
+    }
+    if (ENGINE_DEBUG_MODE) {
+      console.log("Loaded %s", _assets.map((e) => e.key).join(", "));
+    }
+  }
+
+  private static createPlatformSDK(
+    _platform: TResolvedWhiskerConfig["gamePlatform"],
+  ): PlatformSDK {
+    if (_platform instanceof PlatformSDK) return _platform;
+    if (typeof _platform === "function") return new _platform();
+    if (_platform !== "offline") {
+      // "capacitor" used to be built in; it's opt-in now, so the Capacitor plugins aren't always bundled
+      throw new Error(
+        `Unknown gamePlatform "${_platform}". For Capacitor, import { CapacitorSDK } from "whiskerweb/capacitor" ` +
+          `and pass gamePlatform: CapacitorSDK (or an instance).`,
       );
     }
-    return (this._loadAssetsPromise = new Promise<void>(
-      (_resolve: () => void, _reject: (err: unknown) => void): void => {
-        const typeCount: Partial<Record<LoaderType, number>> = {};
-        for (const k in _assets) {
-          if (!Object.prototype.hasOwnProperty.call(_assets, k)) continue;
-          if (_assets[k]) {
-            switch (_assets[k].type) {
-              case LoaderType.PIXI:
-                this.loader.add(_assets[k].key, `./assets/${_assets[k].path}`);
-                typeCount[LoaderType.PIXI] =
-                  (typeCount[LoaderType.PIXI] || 0) + 1;
-                break;
-              case LoaderType.JSON:
-                this.jsonLoader.add(
-                  _assets[k].key,
-                  `./assets/${_assets[k].path}`,
-                );
-                typeCount[LoaderType.JSON] =
-                  (typeCount[LoaderType.JSON] || 0) + 1;
-                break;
-              case LoaderType.WASM:
-                this.wasmLoader.add(
-                  _assets[k].key,
-                  `./assets/${_assets[k].path}`,
-                );
-                typeCount[LoaderType.WASM] =
-                  (typeCount[LoaderType.WASM] || 0) + 1;
-                break;
-            }
-          }
-        }
-
-        const progress = Object.keys(typeCount).map(() => 0);
-        const onProgress = (e: number) => {
-          const _progress =
-            progress.reduce((a, b) => a + b, 0) / progress.length;
-
-          return _onProgress ? _onProgress(_progress) : null;
-        };
-
-        const promises = [];
-
-        if (typeCount[LoaderType.PIXI] > 0) {
-          promises.push(
-            this.loader
-              .load((e) => {
-                return onProgress((progress[0] = e * 100));
-              })
-              .catch(async () => {
-                // todo: add proper retry
-                try {
-                  await this.loader.load();
-                  this._loadAssetsPromise = null;
-                  _resolve();
-                } catch (err) {
-                  this._loadAssetsPromise = null;
-                  _reject(err);
-                }
-              }),
-          );
-        }
-
-        if (typeCount[LoaderType.JSON] > 0) {
-          promises.push(
-            this.jsonLoader
-              .load((e) => onProgress((progress[1] = e)))
-              .catch(async () => {
-                // todo: add proper retry
-                try {
-                  await this.jsonLoader.load();
-                  this._loadAssetsPromise = null;
-                  _resolve();
-                } catch (err) {
-                  this._loadAssetsPromise = null;
-                  _reject(err);
-                }
-              }),
-          );
-        }
-
-        if (typeCount[LoaderType.WASM] > 0) {
-          promises.push(
-            this.wasmLoader
-              .load((e) => onProgress((progress[2] = e)))
-              .catch(async () => {
-                // todo: add proper retry
-                try {
-                  await this.wasmLoader.load();
-                  this._loadAssetsPromise = null;
-                  _resolve();
-                } catch (err) {
-                  this._loadAssetsPromise = null;
-                  _reject(err);
-                }
-              }),
-          );
-        }
-
-        Promise.allSettled(promises)
-          .then(() => {
-            this._loadAssetsPromise = null;
-            if (ENGINE_DEBUG_MODE) {
-              console.log("Loaded %s", _assets.map((e) => e.key).join(", "));
-            }
-            _resolve();
-          })
-          .catch(_reject);
-      },
-    ));
+    return new DummySDK();
   }
 
   private static hideFontPreload(): void {
@@ -891,21 +881,30 @@ ${LogoAscii}
   }
 
   private _setupHookOnError(): void {
-    window.onunhandledrejection = (e: PromiseRejectionEvent) => {
-      this._onPromiseRejectionFunctions.forEach((_f) => _f(e));
-    };
-    window.onerror = (_msg, _url, _lineNo, _columnNo, _error) => {
+    // addEventListener rather than window.onerror/onunhandledrejection, so other handlers aren't replaced
+    window.addEventListener(
+      "unhandledrejection",
+      (e: PromiseRejectionEvent) => {
+        this._onPromiseRejectionFunctions.forEach((_f) => _f(e));
+      },
+    );
+    window.addEventListener("error", (e: ErrorEvent) => {
       this._onErrorFunctions.forEach((_f) =>
-        _f(_msg, _url, _lineNo, _columnNo, _error),
+        _f(e.message, e.filename, e.lineno, e.colno, e.error),
       );
-    };
+    });
   }
 
   private readonly mainLoop: () => void = () => {
     this.deltaTime = this.ticker.deltaTime;
     if (this.fpsDisplay) this.fpsDisplay.begin();
-    TWEEN.update(Date.now());
+    // tween.js's own clock (performance.now), the same one `tween.start()` uses by default
+    updateTweens();
     this.stateManager.onStep();
+    // The loading screen lives on the engine stage, outside every scene
+    if (this.loadingScreenObject?.visible) {
+      Scene.stepObject(this.loadingScreenObject, this.deltaTime);
+    }
     if (!this._pauseRendering)
       this.renderManager.getRenderer().render(this.stage);
     if (this.fpsDisplay) this.fpsDisplay.end();

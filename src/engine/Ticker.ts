@@ -28,7 +28,7 @@ export class Ticker {
     public remove(_func: TickerFunction): void {
         const index: number = this._tasks.findIndex((f: TickerFunction) => _func === f);
         if (index !== -1) {
-            this._tasks.splice(index);
+            this._tasks.splice(index, 1);
         } else {
             console.warn("Failed to remove ticker function" + _func);
         }

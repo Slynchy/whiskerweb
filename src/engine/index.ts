@@ -10,10 +10,10 @@ export * from "./RenderManager";
 export { default as InputManager } from "./InputManager";
 export * from "./PlayerDataSingleton";
 export * from "./AudioSingleton";
-export * from "./FirebaseSingleton";
 export * from "./HelperFunctions"; // the HelperFunctions.ts static class, not the HelperFunctions/ folder
 export * from "./SeededRandom";
 export * from "./Ticker";
+export * from "./TweenGroup";
 export * from "./handleAd";
 
 // Subdirectories

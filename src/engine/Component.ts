@@ -4,14 +4,14 @@ import { ENGINE_DEBUG_MODE } from "./Constants/Constants";
 
 export abstract class Component {
 
+    /**
+     * Every component currently attached to a GameObject.
+     * Maintained by GameObject.addComponent / removeComponent.
+     */
     public static instances: Array<Component> = [];
     public static readonly id: string = "component";
     protected _parent: GameObject;
     protected static readonly _system: typeof System;
-
-    constructor() {
-        Component.instances.push(this);
-    }
 
     public static findInstances<T extends Component>(_searchFunc: (e: T) => boolean): T[] {
         return Component.instances.filter(_searchFunc) as T[];
@@ -29,15 +29,18 @@ export abstract class Component {
     }
 
     public getSystem(): typeof System {
-        return (this.constructor as typeof Component)._system;
+        const system = (this.constructor as typeof Component)._system;
+        if (!system) {
+            throw new Error(`Component "${(this.constructor as typeof Component).id}" has no static _system`);
+        }
+        return system;
     }
 
+    /**
+     * Called by `System.onDestroy` when the component is removed from its GameObject
+     * (directly or because the GameObject was destroyed). Override for cleanup.
+     */
     public onDestroy(): void {
-        const ind = Component.instances.indexOf(this, 0);
-        if(ind === -1) {
-            throw new Error("Component exists without an instance!");
-        }
-        Component.instances.splice(ind, 1);
     }
 
     public abstract onAttach(): void;

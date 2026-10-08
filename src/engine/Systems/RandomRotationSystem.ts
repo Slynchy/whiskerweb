@@ -3,20 +3,13 @@ import { HelperFunctions } from "../HelperFunctions";
 import { System } from "./System";
 import { ENGINE_DEBUG_MODE } from "../Constants/Constants";
 import { RandomRotationComponent } from "../Components/RandomRotationComponent";
-import { smoothDampVec } from "../HelperFunctions/smoothDampVec";
 import { smoothDampAngle } from "../HelperFunctions/smoothDampAngle";
 
 export class RandomRotationSystem extends System {
 
-    public static destroy(_component: Component): void {
-        if (ENGINE_DEBUG_MODE) {
-            console.log("Calling destroy for " + (_component.constructor as typeof Component).id);
-        }
-    }
-
     private static setRandomDestination(_component: RandomRotationComponent)
     {
-        const oldAngle = _component._destAngle;
+        // all in degrees
         _component._destAngle =
             _component._initialAngle + HelperFunctions.randomRange(0, _component.maxAngleDelta) * -1;
     }

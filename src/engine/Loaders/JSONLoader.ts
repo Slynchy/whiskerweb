@@ -4,13 +4,10 @@ import { ENGINE_DEBUG_MODE } from "../Constants/Constants";
 export class JSONLoader extends Loader<object> {
     private readonly _cache: { [key: string]: object } = {};
 
-    // yes
-    private _queueQueue: {key: string, path: string}[] = [];
-
-    private _currentQueue: {key: string, path: string}[] = [];
+    private _queue: {key: string, path: string}[] = [];
 
     add(_key: string, _asset: string): void {
-        this._queueQueue.push({
+        this._queue.push({
             key: _key,
             path: _asset
         });
@@ -38,80 +35,49 @@ export class JSONLoader extends Loader<object> {
     async load(_onProgress?: ((progress: number) => void) | undefined): Promise<
         ILoaderReturnValue
     > {
-        if(this._currentQueue.length > 0) {
-            await new Promise<void>((res, rej) => {
-                let interval = setInterval(() => {
-                    if(this._currentQueue.length === 0) {
-                        clearInterval(interval);
-                        res();
+        const queue = this._queue;
+        this._queue = [];
+        if(queue.length === 0) {
+            _onProgress?.(100);
+            return {};
+        }
+
+        return this.trackLoading(async () => {
+            const result: ILoaderReturnValue = {};
+            let counter = 0;
+            _onProgress?.(0);
+
+            const fetchJSON = async (path: string): Promise<object> => {
+                const resp = await fetch(path);
+                if (!resp.ok) {
+                    throw new Error(`HTTP ${resp.status} loading ${path}`);
+                }
+                return await resp.json();
+            };
+
+            await Promise.all(queue.map(async (e) => {
+                try {
+                    let data: object;
+                    try {
+                        data = await fetchJSON(e.path);
+                    } catch {
+                        // One retry
+                        data = await fetchJSON(e.path);
                     }
-                }, 333);
-            });
-        }
+                    this.cache(e.key, data);
+                    result[e.key] = { success: true };
+                } catch (err) {
+                    result[e.key] = { success: false, error: err as Error };
+                }
+                counter++;
+                _onProgress?.((counter / queue.length) * 100);
+            }));
 
-        if(this._queueQueue.length === 0) {
-            _onProgress ? _onProgress(100) : null;
-            return Promise.resolve({});
-        }
-
-        this._currentQueue = this._queueQueue;
-        this._queueQueue = [];
-
-        const results: Array<{
-            key: string;
-            success: boolean;
-            result: object;
-            error?: Error;
-        }> = this._currentQueue.map((e) => {
-            return {
-                key: e.key,
-                success: false,
-                result: null,
-            };
+            if(Object.keys(result).some((k) => !result[k].success)) {
+                console.error(`Error encountered when loading JSON; full results: %o`, result);
+            }
+            return result;
         });
-
-        let counter = 0;
-        const len = this._currentQueue.length;
-        _onProgress ? _onProgress(0) : null;
-        await Promise.allSettled(
-            this._currentQueue.map((e, i) => {
-                return new Promise<void>((res, rej) => {
-                    results[i].key = e.key;
-                    fetch(e.path)
-                        .catch((err) => (results[i].success = false, results[i].error = err))
-                        .then((resp) => {
-                            if(resp && resp.ok) {
-                                return resp.json() as object;
-                            }
-                        })
-                        .then((o) => {
-                            if(o) {
-                                results[i].result = o;
-                                this.cache(results[i].key, results[i].result);
-                                results[i].success = true;
-                            }
-                            counter++;
-                            _onProgress ? _onProgress((counter / len) * 100) : null;
-                            res();
-                        });
-                });
-            })
-        );
-        if(results.find((r) => Boolean(r.error || !r.success))) {
-            console.error(`Error encountered when loading JSON; full results: %o`, results);
-        }
-
-        const result: ILoaderReturnValue = {};
-        results.forEach((r) => {
-            result[r.key] = {
-                success: r.success,
-                error: r.error,
-            };
-        });
-
-        this._currentQueue = [];
-
-        return result;
     }
 
     unload(_key: string): void {

@@ -1,87 +1,270 @@
 import { IPlayerInfo } from "../Types/IPlayerInfo";
 import { AD_TYPE } from "../Types/AdType";
 import { PurchaseResult } from "../Types/PurchaseResult";
-import { IAPProductID } from "../Constants/IAPData";
 import { IPlatformFriend } from "../Types/IPlatformFriend";
 
+/**
+ * Base class for platform integrations (passed to the engine as config `gamePlatform`).
+ *
+ * Every method has a default implementation with "offline" behaviour, so a subclass only overrides what its
+ * platform supports: no ads, no in-app purchases, no friends, contexts or tournaments, an anonymous local player
+ * with the browser's locale, pause/resume on window blur/focus, and an in-memory save/load.
+ */
 export abstract class PlatformSDK {
+    // In-memory store behind the default save()/load()
+    private _savedData: Record<string, unknown> = {};
+
     protected constructor() { /* nope */
     }
 
     /**
-     * Initializes the SDK. On FBInstant, this would *not* call `startGameAsync`
+     * Initializes the SDK; the engine awaits it during init and logs (rather than throws) any error.
+     * On FBInstant, this would *not* call `startGameAsync`.
+     * Default: resolves immediately
      */
-    public abstract initialize(): Promise<void>;
-
-    public abstract createContext(_suggestedPlayerID: string | Array<string> | null): Promise<void>;
+    public initialize(): Promise<void> {
+        return Promise.resolve();
+    }
 
     /**
-     * This only exists because Facebook has a distinction between init and starting
+     * Default: does nothing (contexts aren't supported)
      */
-    public abstract startGame(): Promise<void>;
-
-    public abstract requestHapticFeedbackAsync(): Promise<boolean>;
+    public createContext(_suggestedPlayerID: string | Array<string> | null): Promise<void> {
+        return Promise.resolve();
+    }
 
     /**
-     * @param _progress The actual progress to set, not increment
+     * This only exists because Facebook has a distinction between init and starting.
+     * Default: resolves immediately
      */
-    public abstract setLoadingProgress(_progress: number): Promise<void>;
-
-    public abstract addOnPauseCallback(cb: () => void): void;
-    public abstract addOnResumeCallback(cb: () => void): void;
+    public startGame(): Promise<void> {
+        return Promise.resolve();
+    }
 
     /**
-     * Gets all player info at once (for game start), not optimal for any other use
+     * Default: a short `navigator.vibrate`; resolves false where vibration isn't available or is blocked
      */
-    public abstract getPlayerInfo(): IPlayerInfo;
+    public requestHapticFeedbackAsync(): Promise<boolean> {
+        try {
+            if (typeof navigator === "undefined" || typeof navigator.vibrate !== "function") {
+                return Promise.resolve(false);
+            }
+            return Promise.resolve(navigator.vibrate(100));
+        } catch (err) {
+            return Promise.resolve(false);
+        }
+    }
 
-    public abstract getEntryPointAsync(): Promise<string>;
+    /**
+     * Reports boot progress to the platform (e.g. a native loading screen). The engine drives its own loading
+     * screen separately, so this should not touch `ENGINE.loadingScreenObject`.
+     * Default: does nothing
+     * @param _progress The actual progress to set (0-100), not increment
+     */
+    public setLoadingProgress(_progress: number): Promise<void> {
+        return Promise.resolve();
+    }
 
-    public abstract getPlayerName(): string;
+    /**
+     * The engine registers its pause callback here when config `pauseOnFocusLoss` is set.
+     * Default: calls `cb` on window blur (addEventListener, so other handlers aren't replaced)
+     */
+    public addOnPauseCallback(cb: () => void): void {
+        window.addEventListener("blur", () => cb());
+    }
 
-    public abstract isAdsSupported(): boolean;
+    /**
+     * The engine registers its resume callback here when config `pauseOnFocusLoss` is set.
+     * Default: calls `cb` on window focus (addEventListener, so other handlers aren't replaced)
+     */
+    public addOnResumeCallback(cb: () => void): void {
+        window.addEventListener("focus", () => cb());
+    }
 
-    public abstract getPlayerId(): string;
+    /**
+     * Gets all player info at once (for game start), not optimal for any other use.
+     * Default: built from getPlayerId(), getContextId(), getContextType(), getPlayerPicUrl() and getPlayerName()
+     */
+    public getPlayerInfo(): IPlayerInfo {
+        return {
+            playerId: this.getPlayerId(),
+            contextId: this.getContextId(),
+            contextType: this.getContextType(),
+            playerPicUrl: this.getPlayerPicUrl(),
+            playerName: this.getPlayerName(),
+        };
+    }
 
-    public abstract getPlayerLocale(): string;
+    /**
+     * Default: ""
+     */
+    public getEntryPointAsync(): Promise<string> {
+        return Promise.resolve("");
+    }
 
-    public abstract getPlayerPicUrl(): string;
+    /**
+     * Default: "" (anonymous local player)
+     */
+    public getPlayerName(): string {
+        return "";
+    }
 
-    public abstract getContextId(): string;
+    /**
+     * Whether `getAdvertisementInstance` can return ads; `handleAd` checks this first.
+     * Default: false
+     */
+    public isAdsSupported(): boolean {
+        return false;
+    }
 
-    public abstract getContextType(): string;
+    /**
+     * Default: "" (anonymous local player)
+     */
+    public getPlayerId(): string {
+        return "";
+    }
 
-    public abstract purchaseAsync(_productId: string): Promise<PurchaseResult>;
+    /**
+     * The player's locale in `en_GB` form (see Constants/Locales).
+     * Default: the browser's language (`navigator.language`, e.g. "en-GB" becomes "en_GB"), or "en_GB" if unavailable
+     */
+    public getPlayerLocale(): string {
+        const language = typeof navigator !== "undefined" ? navigator.language : "";
+        return language ? language.replace(/-/g, "_") : "en_GB";
+    }
 
-    public abstract getFriends(): Promise<IPlatformFriend[]>;
+    /**
+     * Default: "" (no picture)
+     */
+    public getPlayerPicUrl(): string {
+        return "";
+    }
 
-    public abstract submitTournamentScoreAsync(_score: number): Promise<void>;
+    /**
+     * Default: "" (no context)
+     */
+    public getContextId(): string {
+        return "";
+    }
 
-    public abstract switchContext(_id: string): Promise<boolean>;
+    /**
+     * Default: "SOLO"
+     */
+    public getContextType(): string {
+        return "SOLO";
+    }
 
-    public abstract showBannerAd(_placementId: string): Promise<void>;
+    /**
+     * Default: rejects (in-app purchases aren't supported; see isIAPAvailable())
+     */
+    public purchaseAsync(_productId: string): Promise<PurchaseResult> {
+        return Promise.reject(new Error("In-app purchases are not supported on this platform"));
+    }
 
-    public abstract hideBannerAd(_placementId: string): Promise<void>;
+    /**
+     * Default: resolves with no friends
+     */
+    public getFriends(): Promise<IPlatformFriend[]> {
+        return Promise.resolve([]);
+    }
 
-    public abstract getAdvertisementInstance(_type: AD_TYPE, _placementId: string): Promise<any>;
+    /**
+     * Default: does nothing (tournaments aren't supported)
+     */
+    public submitTournamentScoreAsync(_score: number): Promise<void> {
+        return Promise.resolve();
+    }
 
-    public abstract getEntryPointData(): { [key: string]: unknown };
+    /**
+     * Resolves true if the context was switched.
+     * Default: resolves false (contexts aren't supported)
+     */
+    public switchContext(_id: string): Promise<boolean> {
+        return Promise.resolve(false);
+    }
 
-    public abstract getSignedInfo(_payload?: string): Promise<any>;
+    /**
+     * Default: does nothing
+     */
+    public showBannerAd(_placementId: string): Promise<void> {
+        return Promise.resolve();
+    }
 
-    public abstract isIAPAvailable(): boolean;
+    /**
+     * Default: does nothing
+     */
+    public hideBannerAd(_placementId: string): Promise<void> {
+        return Promise.resolve();
+    }
 
-    public abstract getIAPCatalog(): Promise<any>;
+    /**
+     * Resolves with an ad instance that has `loadAsync()` and `showAsync()` (see `handleAd`), or null if there is none.
+     * Default: resolves null (ads aren't supported)
+     */
+    public getAdvertisementInstance(_type: AD_TYPE, _placementId: string): Promise<any> {
+        return Promise.resolve(null);
+    }
+
+    /**
+     * Default: {}
+     */
+    public getEntryPointData(): { [key: string]: unknown } {
+        return {};
+    }
+
+    /**
+     * Default: rejects (signed player info isn't supported)
+     */
+    public getSignedInfo(_payload?: string): Promise<any> {
+        return Promise.reject(new Error("Signed player info is not supported on this platform"));
+    }
+
+    /**
+     * Default: false
+     */
+    public isIAPAvailable(): boolean {
+        return false;
+    }
+
+    /**
+     * Default: resolves with an empty catalog
+     */
+    public getIAPCatalog(): Promise<any> {
+        return Promise.resolve([]);
+    }
 
     /*
         These functions should be pass-thru! A distinct class should handle saving/loading, all this
-        class does is just link the function to the SDK
+        class does is just link the function to the SDK.
+        (The engine saves through its own SaveHandler/LocalStorageSaver, not through these.)
      */
-    public abstract save(_data: Record<string, unknown>): Promise<void>;
 
-    public abstract load(): Promise<Record<string, unknown>>;
+    /**
+     * Default: merges `_data` into an in-memory store that lasts until the page is closed
+     */
+    public save(_data: Record<string, unknown>): Promise<void> {
+        Object.assign(this._savedData, _data);
+        return Promise.resolve();
+    }
 
-    public abstract flush(): Promise<void>;
+    /**
+     * Default: resolves with a copy of the in-memory store written by save()
+     */
+    public load(): Promise<Record<string, unknown>> {
+        return Promise.resolve({ ...this._savedData });
+    }
 
-    public abstract isReady(): boolean;
+    /**
+     * Default: does nothing
+     */
+    public flush(): Promise<void> {
+        return Promise.resolve();
+    }
+
+    /**
+     * Default: true
+     */
+    public isReady(): boolean {
+        return true;
+    }
 }

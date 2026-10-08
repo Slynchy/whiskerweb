@@ -1,6 +1,5 @@
 import { Component } from "../Component";
 import { IVector2 } from "../Types/IVector2";
-import { System } from "../Systems/System";
 import { AnimationSystem } from "../Systems/AnimationSystem";
 import { CurveInterpolator } from "curve-interpolator";
 import { GameObject } from "../GameObject";
@@ -91,6 +90,7 @@ export class AnimationComponent extends Component {
     public initialScale: Record<string, IVector2> = {};
 
     _cachedElements: Record<string, GameObject> = {};
+    private _loggedMissing: Record<string, boolean> = {};
 
     public _time: number = 0;
     public _active: boolean = false;
@@ -149,67 +149,54 @@ export class AnimationComponent extends Component {
     }
 
     onAttach(): void {
+        // Children added after this component (e.g. `new GameObject(label, [anim])`) aren't
+        // there yet; anything not found here is looked up again by getTarget each step.
         Object.keys(this._config.posNodes).forEach((path) => {
             // fixme: this might be a bug; we may need to cache initialPos for root
             if(path === "root") return; // no need for anything here
-            if (!this.initialPos[path]) {
-                let found: GameObject;
-                if(!(found = this._cachedElements[path])) {
-                    const newPath =
-                        (this.parent.name + "!" + path)
-                            .replace(/\//g, "!")
-                            .replace(/ /g, "_");
-                    found = AnimationSystem.findInChildren(this, newPath);
-                    if (!found)
-                        logMissingAnimElement(newPath);
-                    else
-                        this._cachedElements[path] = found;
-                }
-
-                if(found)
-                    this.initialPos[path] = {x: found.position.x, y: found.position.y};
-            }
+            const found = this.getTarget(path, false);
+            if (found && !this.initialPos[path])
+                this.initialPos[path] = {x: found.position.x, y: found.position.y};
         });
         Object.keys(this._config.scaleNodes).forEach((path) => {
             if(path === "root") return; // no need for anything here
-            if (!this.initialScale[path]) {
-                let found: GameObject;
-                if(!(found = this._cachedElements[path])) {
-                    const newPath =
-                        (this.parent.name + "!" + path)
-                            .replace(/\//g, "!")
-                            .replace(/ /g, "_");
-                    found = AnimationSystem.findInChildren(this, newPath);
-                    if (!found)
-                        logMissingAnimElement(newPath);
-                    else
-                        this._cachedElements[path] = found;
-                }
-
-                if(found)
-                    this.initialScale[path] = {x: found.scale.x, y: found.scale.y};
-            }
+            const found = this.getTarget(path, false);
+            if (found && !this.initialScale[path])
+                this.initialScale[path] = {x: found.scale.x, y: found.scale.y};
         });
         Object.keys(this._config.eulerNodes).forEach((path) => {
             if(path === "root") return; // no need for anything here
-            if (!this.initialAngle[path]) {
-                let found: GameObject;
-                if(!(found = this._cachedElements[path])) {
-                    const newPath =
-                        (this.parent.name + "!" + path)
-                            .replace(/\//g, "!")
-                            .replace(/ /g, "_");
-                    found = AnimationSystem.findInChildren(this, newPath);
-                    if (!found)
-                        logMissingAnimElement(newPath);
-                    else
-                        this._cachedElements[path] = found;
-                }
-
-                if(found)
-                    this.initialAngle[path] = found.rotation;
-            }
+            const found = this.getTarget(path, false);
+            if (found && !this.initialAngle[path])
+                this.initialAngle[path] = found.rotation;
         });
+    }
+
+    /**
+     * Returns the GameObject animated by `path` ("root" is the parent), finding and caching it
+     * on first use. Returns null if it isn't in the hierarchy (yet).
+     * @param path Node path from the animation config
+     * @param _logIfMissing Log (once per path, debug mode only) when it can't be found
+     */
+    public getTarget(path: string, _logIfMissing: boolean = true): GameObject | null {
+        if (path === "root") return this.parent;
+        let found: GameObject = this._cachedElements[path];
+        if (!found) {
+            const newPath =
+                (this.parent.label + "!" + path)
+                    .replace(/\//g, "!")
+                    .replace(/ /g, "_");
+            found = AnimationSystem.findInChildren(this, newPath);
+            if (!found) {
+                if (_logIfMissing && !this._loggedMissing[path]) {
+                    this._loggedMissing[path] = true;
+                    logMissingAnimElement(newPath);
+                }
+                return null;
+            }
+            this._cachedElements[path] = found;
+        }
+        return found;
     }
 
     public setIsActive(val: boolean): void {

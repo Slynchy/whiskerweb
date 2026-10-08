@@ -21,7 +21,7 @@ export abstract class PathAlgo {
         if (_allowDiagonal === true) {
             neighbours.push(new NODE(_start.x + 1, _start.y + 1));
             neighbours.push(new NODE(_start.x - 1, _start.y + 1));
-            neighbours.push(new NODE(_start.x + 1, _start.y + 1));
+            neighbours.push(new NODE(_start.x - 1, _start.y - 1));
             neighbours.push(new NODE(_start.x + 1, _start.y - 1));
         }
         for (const _node of neighbours) {
